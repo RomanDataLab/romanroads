@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Do All the Roads Lead to Rome? — Roman Road Network Analysis</title>
+<meta name="description" content="Network analysis of the Roman road network: centrality, H3 hexagon maps, and coverage of 1,388 Roman cities. Data: DARMC 2008 + Hanson 2016.">
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#d4a373; --red:#a50026; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:Georgia,'Times New Roman',serif; line-height:1.6; }
+  .wrap { max-width:960px; margin:0 auto; padding:48px 24px 80px; }
+  header h1 { font-size:2.6rem; font-weight:normal; letter-spacing:.5px; }
+  header h1 em { color:var(--accent); }
+  header p.sub { color:var(--muted); margin-top:8px; font-family:system-ui,sans-serif; font-size:.95rem; }
+  .hero { margin:32px 0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--card); }
+  .hero img { width:100%; display:block; }
+  .hero figcaption { padding:10px 16px; color:var(--muted); font-family:system-ui,sans-serif; font-size:.85rem; border-top:1px solid var(--line); }
+  h2 { font-weight:normal; font-size:1.5rem; margin:48px 0 16px; color:var(--accent); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px 20px; }
+  .stat b { display:block; font-size:1.9rem; color:var(--text); }
+  .stat span { color:var(--muted); font-family:system-ui,sans-serif; font-size:.85rem; }
+  ul.findings { list-style:none; }
+  ul.findings li { padding:10px 0 10px 28px; border-bottom:1px solid var(--line); position:relative; }
+  ul.findings li::before { content:" Via "; position:absolute; left:0; color:var(--red); font-style:italic; font-size:.85rem; top:12px; }
+  .links { display:flex; flex-wrap:wrap; gap:12px; margin-top:16px; }
+  .links a { display:inline-block; background:var(--card); border:1px solid var(--line); color:var(--text); text-decoration:none; padding:10px 18px; border-radius:8px; font-family:system-ui,sans-serif; font-size:.9rem; transition:border-color .15s; }
+  .links a:hover { border-color:var(--accent); }
+  .links a.primary { border-color:var(--accent); color:var(--accent); }
+  footer { margin-top:64px; color:var(--muted); font-family:system-ui,sans-serif; font-size:.8rem; border-top:1px solid var(--line); padding-top:20px; }
+  footer a { color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Do all the roads lead to <em>Rome</em>?</h1>
+    <p class="sub">Network analysis of the Roman road network · DARMC 2008 · 1,388 cities (Hanson 2016) · after Janosov 2023</p>
+  </header>
+
+  <figure class="hero">
+    <img src="output/02_degree_hexmap.png" alt="H3 hexagon map of summed road-network degree with cities">
+    <figcaption>Summed degree per H3 hexagon (res 3) — the single bright cell is Rome. White/black dots are Roman cities colored by Barrington rank.</figcaption>
+  </figure>
+
+  <div class="stats">
+    <div class="stat"><b>#1</b><span>Rome's rank by summed degree and betweenness</span></div>
+    <div class="stat"><b>5,086 / 7,048</b><span>graph nodes / edges (100 components)</span></div>
+    <div class="stat"><b>80%</b><span>of 1,388 cities within 5 km of a road</span></div>
+    <div class="stat"><b>348</b><span>H3 hexagons covering the Empire's extent</span></div>
+  </div>
+
+  <h2>Findings</h2>
+  <ul class="findings">
+    <li>Rome's hexagon tops both degree and betweenness — the network data agrees with the proverb.</li>
+    <li>Damascus, Byzantium, Milan, Lepcis Magna and Lyon sit directly on a digitized road (&lt; 0.1 km).</li>
+    <li>Carthage, Jerusalem, Alexandria, Athens and London all connect within 2 km.</li>
+    <li>The unconnected majors cluster in Crete and the Peloponnesian interior — a digitization gap in the DARMC layer, not an ancient reality.</li>
+  </ul>
+
+  <h2>Explore</h2>
+  <div class="links">
+    <a class="primary" href="output/roman_roads_interactive.html">Interactive map</a>
+    <a href="output/findings.md">Full findings</a>
+    <a href="output/01_roman_roads_map.png">Roads &amp; cities map</a>
+    <a href="output/03_betweenness_hexmap.png">Betweenness hexmap</a>
+    <a href="output/04_italy_detail.png">Italy detail</a>
+  </div>
+
+  <footer>
+    Data: <a href="https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/TI0KAU">DARMC Roman Road Network (2008)</a>, CC BY-NC 3.0 ·
+    <a href="https://oxrep.web.ox.ac.uk/cities-database">Hanson 2016 Cities Database</a> (OxREP), doi:10.5287/bodleian:eqapevAn8 ·
+    Methodology after <a href="https://towardsdatascience.com/do-all-the-roads-lead-to-rome-5b6756ce7d52/">Janosov 2023</a> ·
+    <a href="https://github.com/RomanDataLab/romanroads">Source</a>
+  </footer>
+
+</div>
+</body>
+</html>
