@@ -10,6 +10,12 @@ Pipeline (after Janosov, 2023, milanjanosov.substack.com):
   6. Emit maps (PNG), interactive map (HTML), GEXF for Gephi, CSVs, findings.
 """
 
+import json
+import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 import folium
@@ -27,6 +33,7 @@ import h3
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data" / "roman_roads_v2008.shp"
 CITIES_DATA = ROOT / "data" / "hanson2016_cities.csv"
+WIKI_CACHE = ROOT / "data" / "city_wiki_links.csv"
 OUT = ROOT / "output"
 OUT.mkdir(exist_ok=True)
 
@@ -85,6 +92,127 @@ def fmt_year(y) -> str:
     """Hanson 'Start Date': negative = BC, positive = AD."""
     y = int(y)
     return f"{-y} BC" if y < 0 else f"AD {y}"
+
+
+def _clean_toponym(name: str) -> str:
+    """Strip trailing disambiguation groups: 'Antiochia (Syria) (1)' -> 'Antiochia'."""
+    prev = None
+    while prev != name:
+        prev = name
+        name = re.sub(r"\s*\([^()]*\)\s*$", "", name).strip()
+    return name
+
+
+def resolve_wiki_links(cities) -> dict:
+    """English Wikipedia URL per city (Primary Key -> url), cached in data/city_wiki_links.csv.
+
+    Candidate titles in priority order: ancient toponym, '(ancient city)' / '(ancient site)'
+    variants (enwiki conventions for archaeology articles), then modern toponym.
+    Falls back to a Wikipedia search URL for the ancient city.
+    """
+    cache = {}
+    if WIKI_CACHE.exists():
+        cached = pd.read_csv(WIKI_CACHE)
+        cache = dict(zip(cached["primary_key"].astype(str), cached["url"]))
+    missing = cities[~cities["Primary Key"].astype(str).isin(cache)]
+    if not len(missing):
+        return cache
+
+    print(f"resolving Wikipedia links for {len(missing)} cities ...")
+    order = {}  # primary key -> candidate titles, best first
+    title_owners = {}
+    for _, c in missing.iterrows():
+        anc = _clean_toponym(str(c["Ancient Toponym"]))
+        cands = [anc, f"{anc} (ancient city)", f"{anc} (ancient site)",
+                 str(c["Modern Toponym"])]
+        cands = [t for t in dict.fromkeys(cands) if t and t.lower() not in ("unknown", "nan")]
+        order[str(c["Primary Key"])] = cands
+        for t in cands:
+            title_owners.setdefault(t, 0)
+
+    # batch existence check via MediaWiki API (50 titles per query), throttled
+    resolved = {}  # original title -> canonical existing title
+    titles = list(title_owners)
+    api = "https://en.wikipedia.org/w/api.php"
+    for i in range(0, len(titles), 50):
+        batch = titles[i:i + 50]
+        q = urllib.parse.urlencode({
+            "action": "query", "format": "json", "redirects": 1,
+            "titles": "|".join(t.replace(" ", "_") for t in batch)})
+        for attempt in range(4):
+            try:
+                req = urllib.request.Request(f"{api}?{q}",
+                                             headers={"User-Agent": "romanroads-analysis/1.0"})
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    data = json.load(r)
+                break
+            except urllib.error.HTTPError as e:
+                if e.code != 429 or attempt == 3:
+                    raise
+                time.sleep(int(e.headers.get("Retry-After", 10 * (attempt + 1))))
+        else:
+            continue
+        query = data.get("query", {})
+        norm = {n["from"]: n["to"] for n in query.get("normalized", [])}
+        reds = {r_["from"]: r_["to"] for r_ in query.get("redirects", [])}
+        existing = {p["title"] for p in query.get("pages", {}).values() if "missing" not in p}
+        for t in batch:
+            final = reds.get(norm.get(t, t), norm.get(t, t))
+            final = reds.get(final, final)  # follow one chained redirect
+            if final in existing:
+                resolved[t] = final
+        time.sleep(0.5)
+
+    # second pass: flag disambiguation pages — never link to those
+    disambig = set()
+    finals = sorted(set(resolved.values()))
+    for i in range(0, len(finals), 50):
+        batch = finals[i:i + 50]
+        q = urllib.parse.urlencode({
+            "action": "query", "format": "json", "prop": "pageprops",
+            "ppprop": "disambiguation",
+            "titles": "|".join(t.replace(" ", "_") for t in batch)})
+        for attempt in range(4):
+            try:
+                req = urllib.request.Request(f"{api}?{q}",
+                                             headers={"User-Agent": "romanroads-analysis/1.0"})
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    data = json.load(r)
+                break
+            except urllib.error.HTTPError as e:
+                if e.code != 429 or attempt == 3:
+                    raise
+                time.sleep(int(e.headers.get("Retry-After", 10 * (attempt + 1))))
+        else:
+            continue
+        for p in data.get("query", {}).get("pages", {}).values():
+            if "missing" not in p and "disambiguation" in p.get("pageprops", {}):
+                disambig.add(p["title"])
+        time.sleep(0.5)
+
+    def to_url(title: str) -> str:
+        return "https://en.wikipedia.org/wiki/" + urllib.parse.quote(title.replace(" ", "_"))
+
+    new_rows = []
+    direct, fallback = 0, 0
+    for pk, cands in order.items():
+        hit = next((resolved[t] for t in cands
+                    if t in resolved and resolved[t] not in disambig), None)
+        if hit:
+            url = to_url(hit)
+            direct += 1
+        else:
+            anc = cands[0]
+            url = ("https://en.wikipedia.org/wiki/Special:Search?search="
+                   + urllib.parse.quote(f"{anc} ancient Roman city"))
+            fallback += 1
+        cache[pk] = url
+        new_rows.append((pk, url))
+
+    pd.DataFrame(new_rows, columns=["primary_key", "url"]).to_csv(
+        WIKI_CACHE, mode="a", header=not WIKI_CACHE.exists(), index=False)
+    print(f"wiki links: {direct} direct articles, {fallback} search fallbacks")
+    return cache
 
 
 def plot_base_map(roads: gpd.GeoDataFrame, cities: gpd.GeoDataFrame = None) -> None:
@@ -233,8 +361,12 @@ def export_gexf(G: nx.Graph) -> None:
     print("saved roman_roads_graph.gexf")
 
 
-def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None) -> None:
+def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
+                      wiki_urls: dict = None) -> None:
     m = folium.Map(location=[42.5, 12.5], zoom_start=5, tiles="cartodb dark_matter")
+    m.get_root().header.add_child(folium.Element(
+        "<style>.city-link{color:#4d9fff;font-weight:600;text-decoration:none}"
+        ".city-link:hover{color:#1a56db;text-decoration:underline}</style>"))
     folium.TileLayer("openstreetmap", name="OSM", show=False).add_to(m)
 
     roads_simpl = roads.copy()
@@ -268,12 +400,17 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None) -> No
         ]:
             fg = folium.FeatureGroup(name=label, show=connected)
             for _, c in cities[cities["connected"] == connected].iterrows():
+                name = c["Ancient Toponym"]
+                url = (wiki_urls or {}).get(str(c["Primary Key"]))
+                if url:
+                    name = (f'<a class="city-link" href="{url}" '
+                            f'target="_blank" rel="noopener noreferrer">{name}</a>')
                 folium.CircleMarker(
                     location=[c.geometry.y, c.geometry.x],
                     radius={1: 7, 2: 4.5, 3: 2.5, 4: 1.8, 5: 1.5}.get(c["rank"], 1.5),
                     color="#333333", weight=0.4, fill=True,
                     fill_color=RANK_COLORS[c["rank"]], fill_opacity=0.9,
-                    tooltip=(f"<b>{c['Ancient Toponym']}</b> ({c['Modern Toponym']})<br>"
+                    tooltip=(f"<b>{name}</b> ({c['Modern Toponym']})<br>"
                              f"Established: {fmt_year(c['Start Date'])}<br>"
                              f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}"),
                 ).add_to(fg)
@@ -353,7 +490,8 @@ def main() -> None:
     plot_hexmap(hexes, roads, rome if rome_kind == "polygon" else None, "betweenness", "03_betweenness_hexmap.png", cities)
     plot_italy_detail(roads, cities)
     export_gexf(G)
-    build_interactive(roads, hexes, rome, cities)
+    wiki_urls = resolve_wiki_links(cities)
+    build_interactive(roads, hexes, rome, cities, wiki_urls)
     write_findings(hexes, G, cities)
     print("done.")
 
