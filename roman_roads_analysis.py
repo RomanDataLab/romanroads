@@ -34,6 +34,20 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data" / "roman_roads_v2008.shp"
 CITIES_DATA = ROOT / "data" / "hanson2016_cities.csv"
 WIKI_CACHE = ROOT / "data" / "city_wiki_links.csv"
+FOUNDERS_CACHE = ROOT / "data" / "city_founders.csv"
+
+# Approximate year each province came under Roman control (negative = BC);
+# a city whose Start Date is earlier was founded before the conquest.
+PROVINCE_CONQUEST = {
+    "Italia": -270, "Sicilia": -241, "Silicia": -241, "Corsica": -238, "Sardinia": -238,
+    "Hispania": -197, "Baetica": -206, "Lusitania": -25, "Gallia Narbonensis": -121,
+    "Gallia": -51, "Germania": 85, "Raetia": -15, "Noricum": -15, "Alpes": -15,
+    "Pannonia": 9, "Dalmatia": -32, "Dacia": 106, "Macedonia": -148, "Achaea": -146,
+    "Thracia": 46, "Asia": -129, "Bithynia": -74, "Cilicia": -67, "Creta": -67,
+    "Lycia": 43, "Pamphylia": 43, "Cappadocia": -25, "Galatia": -25, "Syria": -63,
+    "Arabia": 106, "Aegyptus": -30, "Cyrenaica": -74, "Africa": -146, "Numidia": -46,
+    "Mauretania": 40, "Britannia": 43, "Moesia": -27,
+}
 OUT = ROOT / "output"
 OUT.mkdir(exist_ok=True)
 
@@ -215,6 +229,136 @@ def resolve_wiki_links(cities) -> dict:
     return cache
 
 
+def _wiki_api_get(api: str, params: dict) -> dict:
+    q = urllib.parse.urlencode(params)
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(f"{api}?{q}",
+                                         headers={"User-Agent": "romanroads-analysis/1.0"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.load(r)
+            time.sleep(0.5)
+            return data
+        except urllib.error.HTTPError as e:
+            if e.code not in (429, 500, 502, 503, 504) or attempt == 4:
+                raise
+            time.sleep(int(e.headers.get("Retry-After", 10 * (attempt + 1))))
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            if attempt == 4:
+                raise
+            time.sleep(5 * (attempt + 1))
+    return {}
+
+
+def _conquest_year(province: str):
+    p = province or ""
+    for prefix, year in sorted(PROVINCE_CONQUEST.items(), key=lambda kv: -len(kv[0])):
+        if p.startswith(prefix):
+            return year
+    return None
+
+
+def resolve_founders(cities, wiki_urls: dict) -> dict:
+    """Primary Key -> founder label, for pre-conquest cities with a known founder.
+
+    A city qualifies when its Start Date precedes its province's Roman conquest
+    year. Founders come from Wikidata property P112 ('founded by') via the
+    already-resolved English Wikipedia articles. Cached in data/city_founders.csv.
+    """
+    checked = {}
+    if FOUNDERS_CACHE.exists():
+        c = pd.read_csv(FOUNDERS_CACHE, keep_default_na=False)
+        checked = dict(zip(c["primary_key"].astype(str), c["founder"]))
+
+    todo = []  # (primary key, enwiki title) qualifying for a Wikidata lookup
+    unmatched = set()
+    for _, c in cities.iterrows():
+        pk = str(c["Primary Key"])
+        if pk in checked:
+            continue
+        conquest = _conquest_year(c["Province"])
+        url = (wiki_urls or {}).get(pk, "")
+        if conquest is None:
+            unmatched.add(c["Province"])
+            checked[pk] = ""
+        elif int(c["Start Date"]) >= conquest or "/wiki/Special:Search" in url:
+            checked[pk] = ""  # Roman-era foundation or no article to query
+        else:
+            todo.append((pk, urllib.parse.unquote(url.split("/wiki/")[-1]).replace("_", " ")))
+    if unmatched:
+        print(f"WARNING: no conquest year for provinces: {sorted(unmatched)}")
+
+    if todo:
+        print(f"fetching founders from Wikidata for {len(todo)} pre-conquest cities ...")
+        # 1) enwiki title -> Wikidata QID
+        qids = {}
+        api = "https://en.wikipedia.org/w/api.php"
+        for i in range(0, len(todo), 50):
+            batch = todo[i:i + 50]
+            data = _wiki_api_get(api, {"action": "query", "format": "json",
+                                       "prop": "pageprops", "ppprop": "wikibase_item",
+                                       "titles": "|".join(t for _, t in batch)})
+            for p in data.get("query", {}).get("pages", {}).values():
+                qid = p.get("pageprops", {}).get("wikibase_item")
+                if qid and "missing" not in p:
+                    qids[p["title"].replace("_", " ")] = qid
+
+        # 2) QID -> P112 'founded by' QIDs
+        founder_qs = {}
+        wd = "https://www.wikidata.org/w/api.php"
+        qlist = sorted(set(qids.values()))
+        for i in range(0, len(qlist), 50):
+            data = _wiki_api_get(wd, {"action": "wbgetentities", "format": "json",
+                                      "ids": "|".join(qlist[i:i + 50]), "props": "claims"})
+            for qid, ent in data.get("entities", {}).items():
+                claims = [cl for cl in ent.get("claims", {}).get("P112", [])
+                          if cl.get("mainsnak", {}).get("snaktype") == "value"]
+                qs = [cl["mainsnak"]["datavalue"]["value"]["id"] for cl in claims]
+                if qs:
+                    founder_qs[qid] = qs[:3]
+
+        # 3) founder QIDs -> labels + life dates (reject anachronistic article matches)
+        labels, lifespans = {}, {}
+        fl = sorted({f for v in founder_qs.values() for f in v})
+        for i in range(0, len(fl), 50):
+            data = _wiki_api_get(wd, {"action": "wbgetentities", "format": "json",
+                                      "ids": "|".join(fl[i:i + 50]),
+                                      "props": "labels|claims", "languages": "en"})
+            for qid, ent in data.get("entities", {}).items():
+                lab = ent.get("labels", {}).get("en", {}).get("value")
+                if lab:
+                    labels[qid] = lab
+                years = []
+                for prop in ("P569", "P570"):  # birth / death
+                    for cl in ent.get("claims", {}).get(prop, []):
+                        if cl.get("mainsnak", {}).get("snaktype") == "value":
+                            t = cl["mainsnak"]["datavalue"]["value"].get("time", "")
+                            if len(t) >= 5 and t[0] in "+-":
+                                try:
+                                    year = int(t[1:5])
+                                    years.append(-year if t[0] == "-" else year)
+                                except ValueError:
+                                    pass
+                if years:
+                    lifespans[qid] = years
+
+        n_found = 0
+        for pk, title in todo:
+            qs = founder_qs.get(qids.get(title, ""), [])
+            # a founder who lived after AD 600 cannot have founded a pre-conquest
+            # Roman-era city — the article match was wrong (e.g. a modern namesake)
+            names = [labels[q] for q in qs
+                     if q in labels and max(lifespans.get(q, [0])) <= 600]
+            checked[pk] = " and ".join(names) if names else ""
+            if names:
+                n_found += 1
+        print(f"founders known for {n_found} of {len(todo)} pre-conquest cities")
+
+    pd.DataFrame(sorted(checked.items()), columns=["primary_key", "founder"]).to_csv(
+        FOUNDERS_CACHE, index=False)
+    return checked
+
+
 def plot_base_map(roads: gpd.GeoDataFrame, cities: gpd.GeoDataFrame = None) -> None:
     fig, ax = plt.subplots(figsize=(14, 10), dpi=150)
     if "CERTAINTY" in roads.columns:
@@ -362,7 +506,7 @@ def export_gexf(G: nx.Graph) -> None:
 
 
 def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
-                      wiki_urls: dict = None) -> None:
+                      wiki_urls: dict = None, founders: dict = None) -> None:
     m = folium.Map(location=[42.5, 12.5], zoom_start=5, tiles="cartodb dark_matter")
     m.get_root().header.add_child(folium.Element(
         "<style>.city-link{color:#4d9fff;font-weight:600;text-decoration:none}"
@@ -405,19 +549,18 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 if url:
                     name = (f'<a class="city-link" href="{url}" '
                             f'target="_blank" rel="noopener noreferrer">{name}</a>')
+                founder = (founders or {}).get(str(c["Primary Key"]), "")
+                founded = f"<br>founded by {founder}" if founder else ""
+                info = (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
+                        f"Established: {fmt_year(c['Start Date'])}{founded}<br>"
+                        f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}")
                 folium.CircleMarker(
                     location=[c.geometry.y, c.geometry.x],
                     radius={1: 7, 2: 4.5, 3: 2.5, 4: 1.8, 5: 1.5}.get(c["rank"], 1.5),
                     color="#333333", weight=0.4, fill=True,
                     fill_color=RANK_COLORS[c["rank"]], fill_opacity=0.9,
-                    popup=folium.Popup(
-                        f"<b>{name}</b> ({c['Modern Toponym']})<br>"
-                        f"Established: {fmt_year(c['Start Date'])}<br>"
-                        f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}",
-                        max_width=280),
-                    tooltip=(f"<b>{name}</b> ({c['Modern Toponym']})<br>"
-                             f"Established: {fmt_year(c['Start Date'])}<br>"
-                             f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}"),
+                    popup=folium.Popup(info, max_width=280),
+                    tooltip=info,
                 ).add_to(fg)
             fg.add_to(m)
 
@@ -496,7 +639,8 @@ def main() -> None:
     plot_italy_detail(roads, cities)
     export_gexf(G)
     wiki_urls = resolve_wiki_links(cities)
-    build_interactive(roads, hexes, rome, cities, wiki_urls)
+    founders = resolve_founders(cities, wiki_urls)
+    build_interactive(roads, hexes, rome, cities, wiki_urls, founders)
     write_findings(hexes, G, cities)
     print("done.")
 
