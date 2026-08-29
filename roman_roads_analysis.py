@@ -550,7 +550,18 @@ def export_gexf(G: nx.Graph) -> None:
 
 def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                       wiki_urls: dict = None, founders: dict = None) -> None:
-    m = folium.Map(location=[42.5, 12.5], zoom_start=5, tiles="cartodb dark_matter")
+    esri_dark = folium.TileLayer(
+        tiles=("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
+               "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"),
+        attr="Esri, HERE, Garmin, FAO, NOAA, USGS", name="Esri Dark Gray",
+    )
+    m = folium.Map(location=[42.5, 12.5], zoom_start=5, tiles=esri_dark)
+    folium.TileLayer(  # place labels / borders on top, always on
+        tiles=("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
+               "World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"),
+        attr="Esri, HERE, Garmin, FAO, NOAA, USGS",
+        name="Esri labels", overlay=True, control=False,
+    ).add_to(m)
     m.get_root().header.add_child(folium.Element(
         "<style>.city-link{color:#4d9fff;font-weight:600;text-decoration:none}"
         ".city-link:hover{color:#1a56db;text-decoration:underline}</style>"))
