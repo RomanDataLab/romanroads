@@ -48,6 +48,41 @@ PROVINCE_CONQUEST = {
     "Arabia": 106, "Aegyptus": -30, "Cyrenaica": -74, "Africa": -146, "Numidia": -46,
     "Mauretania": 40, "Britannia": 43, "Moesia": -27,
 }
+
+# Pre-Roman power per province (longest-prefix match) — fallback "founded by" label
+# for pre-conquest cities with no Wikidata founder.
+PRE_ROMAN_PEOPLE = {
+    "Italia (VII Etruria)": "the Etruscans",
+    "Italia (I Latium": "the Latins",
+    "Italia (IV Samnium": "the Samnites",
+    "Italia (II Apulia": "the Iapygians",
+    "Italia (III Lucania": "the Lucanians",
+    "Italia (V Picenum": "the Picentes",
+    "Italia (VI Umbria": "the Umbrians",
+    "Italia (VIII Aemilia": "the Boii",
+    "Italia (IX Liguria": "the Ligures",
+    "Italia (X Venetia": "the Veneti",
+    "Italia (XI Transpadana": "the Insubres",
+    "Italia": "the Italic peoples",
+    "Sicilia": "the ancient Greeks", "Silicia": "the ancient Greeks",
+    "Corsica": "the Nuragic Sardinians",
+    "Hispania": "the Iberians", "Baetica": "the Iberians", "Lusitania": "the Lusitanians",
+    "Gallia": "the Gauls",
+    "Britannia": "the Britons",
+    "Germania": "the Germanic tribes",
+    "Raetia": "the Raeti", "Noricum": "the Norici", "Alpes": "the Celto-Ligurians",
+    "Pannonia": "the Pannonians", "Dalmatia": "the Illyrians",
+    "Moesia": "the Thracians", "Dacia": "the Dacians", "Thracia": "the Thracians",
+    "Macedonia": "the Macedonians", "Achaea": "the ancient Greeks", "Epirus": "the Epirotes",
+    "Asia": "the Attalid Greeks", "Bithynia": "the Bithynians",
+    "Cappadocia": "the Cappadocians", "Galatia": "the Galatians",
+    "Cilicia": "the Cilicians", "Lycia": "the Lycians",
+    "Creta": "the ancient Greeks",
+    "Syria Palestina": "the Hasmonean Judaeans", "Syria": "the Seleucids",
+    "Arabia": "the Nabataeans", "Aegyptus": "the ancient Egyptians",
+    "Africa": "the Carthaginians", "Numidia": "the Numidians",
+    "Mauretania": "the Mauretanians",
+}
 OUT = ROOT / "output"
 OUT.mkdir(exist_ok=True)
 
@@ -255,6 +290,14 @@ def _conquest_year(province: str):
     for prefix, year in sorted(PROVINCE_CONQUEST.items(), key=lambda kv: -len(kv[0])):
         if p.startswith(prefix):
             return year
+    return None
+
+
+def _pre_roman_people(province: str):
+    p = province or ""
+    for prefix, people in sorted(PRE_ROMAN_PEOPLE.items(), key=lambda kv: -len(kv[0])):
+        if p.startswith(prefix):
+            return people
     return None
 
 
@@ -550,6 +593,11 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                     name = (f'<a class="city-link" href="{url}" '
                             f'target="_blank" rel="noopener noreferrer">{name}</a>')
                 founder = (founders or {}).get(str(c["Primary Key"]), "")
+                if not founder:
+                    # no Wikidata founder: fall back to who ruled the region before Rome
+                    cq = _conquest_year(c["Province"])
+                    if cq is not None and int(c["Start Date"]) < cq:
+                        founder = _pre_roman_people(c["Province"]) or ""
                 founded = f"<br>founded by {founder}" if founder else ""
                 info = (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
                         f"Established: {fmt_year(c['Start Date'])}{founded}<br>"
