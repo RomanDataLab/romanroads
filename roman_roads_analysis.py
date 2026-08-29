@@ -410,6 +410,11 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                     radius={1: 7, 2: 4.5, 3: 2.5, 4: 1.8, 5: 1.5}.get(c["rank"], 1.5),
                     color="#333333", weight=0.4, fill=True,
                     fill_color=RANK_COLORS[c["rank"]], fill_opacity=0.9,
+                    popup=folium.Popup(
+                        f"<b>{name}</b> ({c['Modern Toponym']})<br>"
+                        f"Established: {fmt_year(c['Start Date'])}<br>"
+                        f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}",
+                        max_width=280),
                     tooltip=(f"<b>{name}</b> ({c['Modern Toponym']})<br>"
                              f"Established: {fmt_year(c['Start Date'])}<br>"
                              f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}"),
