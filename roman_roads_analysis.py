@@ -49,6 +49,15 @@ PROVINCE_CONQUEST = {
     "Mauretania": 40, "Britannia": 43, "Moesia": -27,
 }
 
+# Curated founders for famous cities where Wikidata's P112 is missing, circular
+# or plainly wrong. Keyed by exact Hanson toponym; empty string suppresses the line.
+FOUNDER_OVERRIDES = {
+    "Cartago": "the Phoenicians (Tyre)",
+    "Smyrna": "the ancient Greeks",
+    "Noviomagus (Germania Inferior)": "",  # Wikidata's 'Trajan' predates his reign
+}
+
+
 # Pre-Roman power per province (longest-prefix match) — fallback "founded by" label
 # for pre-conquest cities with no Wikidata founder.
 PRE_ROMAN_PEOPLE = {
@@ -603,12 +612,16 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 if url:
                     name = (f'<a class="city-link" href="{url}" '
                             f'target="_blank" rel="noopener noreferrer">{name}</a>')
-                founder = (founders or {}).get(str(c["Primary Key"]), "")
-                if not founder:
-                    # no Wikidata founder: fall back to who ruled the region before Rome
-                    cq = _conquest_year(c["Province"])
-                    if cq is not None and int(c["Start Date"]) < cq:
-                        founder = _pre_roman_people(c["Province"]) or ""
+                toponym = c["Ancient Toponym"]
+                if toponym in FOUNDER_OVERRIDES:
+                    founder = FOUNDER_OVERRIDES[toponym]
+                else:
+                    founder = (founders or {}).get(str(c["Primary Key"]), "")
+                    if not founder:
+                        # no Wikidata founder: fall back to who ruled the region before Rome
+                        cq = _conquest_year(c["Province"])
+                        if cq is not None and int(c["Start Date"]) < cq:
+                            founder = _pre_roman_people(c["Province"]) or ""
                 founded = f"<br>founded by {founder}" if founder else ""
                 info = (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
                         f"Established: {fmt_year(c['Start Date'])}{founded}<br>"
