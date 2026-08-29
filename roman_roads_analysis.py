@@ -51,8 +51,10 @@ PROVINCE_CONQUEST = {
 
 # Curated founders for famous cities where Wikidata's P112 is missing, circular
 # or plainly wrong. Keyed by exact Hanson toponym; empty string suppresses the line.
+# Overrides also bypass the conquest-date gate (needed for refoundations such as
+# Carthage, whose Hanson Start Date is Caesar's 49 BC colony, not 814 BC Tyre).
 FOUNDER_OVERRIDES = {
-    "Cartago": "the Phoenicians (Tyre)",
+    "Carthago": "the Phoenicians (Tyre)",
     "Smyrna": "the ancient Greeks",
     "Noviomagus (Germania Inferior)": "",  # Wikidata's 'Trajan' predates his reign
 }
