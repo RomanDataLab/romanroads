@@ -55,8 +55,17 @@ PROVINCE_CONQUEST = {
 # Carthage, whose Hanson Start Date is Caesar's 49 BC colony, not 814 BC Tyre).
 FOUNDER_OVERRIDES = {
     "Carthago": "the Phoenicians (Tyre)",
-    "Smyrna": "the ancient Greeks",
+    "Smyrna": "the Aeolians",              # originally Aeolian, later Ionian
+    "Cnossus": "the Minoans",              # Hanson dates it to -500 (classical era)
     "Noviomagus (Germania Inferior)": "",  # Wikidata's 'Trajan' predates his reign
+    # Phoenician colonies in western Sicily (region rules would mis-file them as Greek)
+    "Panormus": "the Phoenicians",
+    "Soluntum": "the Phoenicians",
+    "Lilybaeum": "the Phoenicians",        # founded by Motya's refugees, -397
+    # Dorian islands the Cyclades box would file as Ionian
+    "Corcyra": "the Dorians",              # Corinthian colony
+    "Melos": "the Dorians",
+    "Thera": "the Dorians",
 }
 
 
@@ -309,6 +318,45 @@ def _pre_roman_people(province: str):
     for prefix, people in sorted(PRE_ROMAN_PEOPLE.items(), key=lambda kv: -len(kv[0])):
         if p.startswith(prefix):
             return people
+    return None
+
+
+def _greek_tribe(lat: float, lng: float, start: int, province: str):
+    """Refine a generic 'ancient Greeks' founder into the historical Greek people
+    — Dorians, Ionians, Achaeans, Aeolians, Boeotians, Arcadians — or the
+    pre-Greek Minoans/Mycenaeans and Sicily's indigenous Sicels/Sicanians,
+    using foundation era and region. None when no refinement applies.
+    Boxes are (lng_min, lng_max, lat_min, lat_max), first match wins."""
+    p = province or ""
+    if not p.startswith(("Achaea", "Sicilia", "Silicia", "Creta", "Asia")):
+        return None
+    if p.startswith("Creta"):
+        if lat < 34:                      # Cyrenaica half of the joint province
+            return "the Dorians"          # (Cyrene, a Spartan/Theran colony)
+        return "the Minoans" if start < -1450 else "the Dorians"
+    if start < -1100:                     # Bronze Age mainland / Aegean
+        return "the Mycenaeans"
+    if p.startswith(("Sicilia", "Silicia")):
+        if start < -734:                  # before Greek colonisation began
+            return "the Sicanians" if lng < 13.3 else "the Sicels"
+        return "the Ionians" if (lat > 37.6 and lng > 14.8) else "the Dorians"
+    boxes = [
+        ((20.9, 22.9, 38.0, 38.9), "the Achaeans"),    # Achaea's north coast
+        ((21.7, 22.55, 37.2, 37.9), "the Arcadians"),  # Arcadia
+        ((20.5, 23.3, 36.0, 38.4), "the Dorians"),     # rest of the Peloponnese
+        ((22.4, 23.5, 37.9, 38.8), "the Boeotians"),
+        ((23.2, 24.3, 37.6, 38.3), "the Ionians"),     # Attica
+        ((23.3, 24.7, 38.2, 39.2), "the Ionians"),     # Euboea
+        ((24.2, 26.6, 36.1, 37.8), "the Ionians"),     # Cyclades
+        ((26.5, 28.6, 35.3, 37.2), "the Dorians"),     # Dodecanese / Doris / Caria
+        ((23.3, 26.6, 34.3, 36.1), "the Dorians"),     # Crete
+        ((21.7, 23.8, 38.8, 40.2), "the Aeolians"),    # Thessaly
+        ((26.0, 27.6, 38.3, 39.8), "the Aeolians"),    # Aeolis (Asia province)
+        ((26.5, 28.2, 37.0, 38.4), "the Ionians"),     # Ionia (Asia province)
+    ]
+    for (x0, x1, y0, y1), label in boxes:
+        if x0 <= lng <= x1 and y0 <= lat <= y1:
+            return label
     return None
 
 
@@ -620,10 +668,13 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 else:
                     founder = (founders or {}).get(str(c["Primary Key"]), "")
                     if not founder:
-                        # no Wikidata founder: fall back to who ruled the region before Rome
+                        # no Wikidata founder: fall back to who ruled the region
+                        # before Rome, refined per Greek people where applicable
                         cq = _conquest_year(c["Province"])
                         if cq is not None and int(c["Start Date"]) < cq:
-                            founder = _pre_roman_people(c["Province"]) or ""
+                            founder = (_greek_tribe(c.geometry.y, c.geometry.x,
+                                                    int(c["Start Date"]), c["Province"])
+                                       or _pre_roman_people(c["Province"]) or "")
                 founded = f"<br>founded by {founder}" if founder else ""
                 info = (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
                         f"Established: {fmt_year(c['Start Date'])}{founded}<br>"
