@@ -38,6 +38,23 @@ Rome's hexagon ranks **#1** by summed betweenness.
 
 The hexagon containing Rome (`831e80fffffffff`) **is** the top-degree cell — all roads lead to Rome.
 
+## Cities by estimated population (c. AD 100-165)
+
+Population estimates cover **887 of 1388** cities (210 from Hanson & Ortman 2017 JRSI; 675 derived from Hanson 2016 built-up areas via a density relation fitted on their published estimates (pop = 44.5 x area^1.33, r2 = 0.985); 2 from Chandler/Modelski via Reba et al. 2016, anchored to AD 100-200). All estimates refer to the same 1st-2nd century AD window.
+
+| rank | city | modern | province | population | source |
+|---|---|---|---|---|---|
+| 1 | Roma | Rome | Italia (VII Etruria) | ~923,406 | Hanson & Ortman 2017 |
+| 2 | Alexandria (Aegyptus) | Alexandria | Aegyptus | ~410,535 | Hanson & Ortman 2017 |
+| 3 | Lepcis Magna | Lebda | Africa Proconsularis | ~157,196 | Hanson 2016 area x density fit |
+| 4 | Rhodus | Rhodes | Asia | ~133,449 | Hanson 2016 area x density fit |
+| 5 | Antiochia (Syria) | Antakya | Syria | ~127,879 | Hanson 2016 area x density fit |
+| 6 | Carthago | Tunis | Africa Proconsularis | ~102,170 | Hanson & Ortman 2017 |
+| 7 | Mazaca | Kayseri | Cappadocia et Galatia | ~100,000 | Modelski |
+| 8 | Sparta | Sparti | Achaea | ~89,076 | Hanson 2016 area x density fit |
+| 9 | Syracusae | Syracuse | Silicia | ~83,834 | Hanson & Ortman 2017 |
+| 10 | Arsinoe | Kom F?ris | Aegyptus | ~82,897 | Hanson 2016 area x density fit |
+
 ## Roman cities connected by the roads
 
 Of **1388** known Roman cities (Hanson 2016, 100 BC – AD 300), **1105 (80%)** lie within 5 km of a DARMC road.

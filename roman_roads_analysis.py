@@ -11,6 +11,7 @@ Pipeline (after Janosov, 2023, milanjanosov.substack.com):
 """
 
 import json
+import math
 import re
 import time
 import urllib.error
@@ -33,6 +34,7 @@ import h3
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data" / "roman_roads_v2008.shp"
 CITIES_DATA = ROOT / "data" / "hanson2016_cities.csv"
+POP_DATA = ROOT / "data" / "city_populations.csv"
 WIKI_CACHE = ROOT / "data" / "city_wiki_links.csv"
 FOUNDERS_CACHE = ROOT / "data" / "city_founders.csv"
 
@@ -115,6 +117,40 @@ CITY_CONNECT_KM = 5  # max distance from a city to the nearest road to count as 
 RANK_COLORS = {r: to_hex(plt.get_cmap("YlOrRd")(v)) for r, v in
                zip(range(1, 6), [0.95, 0.75, 0.55, 0.35, 0.15])}
 
+# Population classes (persons, c. AD 100-165 estimates): pale yellow -> deep red
+POP_CLASSES = [  # (min, max, label)
+    (0, 5000, "< 5k"), (5000, 15000, "5-15k"), (15000, 50000, "15-50k"),
+    (50000, 150000, "50-150k"), (150000, float("inf"), "> 150k"),
+]
+POP_CLASS_COLORS = {lab: to_hex(plt.get_cmap("YlOrRd")(v)) for (_, _, lab), v in
+                    zip(POP_CLASSES, [0.15, 0.35, 0.55, 0.75, 0.95])}
+POP_UNKNOWN_COLOR = "#9a9a9a"
+
+# Foundation-nation classes for the third coloring scheme
+NATION_COLORS = {
+    "Roman": "#e74c3c", "Greeks": "#3498db", "Phoenician": "#9b59b6",
+    "Etruscan": "#e67e22", "Latin": "#1abc9c", "Italic (other)": "#95a5a6",
+    "Egyptian": "#f4d03f", "Celtic / Gallic": "#2ecc71", "Iberian": "#d7bde2",
+    "Illyrian-Thracian": "#f5b041", "Near Eastern": "#d2b48c",
+    "Pre-Greek (Minoan/Mycenaean)": "#f0b27a", "Unknown": "#bdc3c7",
+}
+
+
+def pop_class_color(pop):
+    if pop is None or pop != pop:
+        return POP_UNKNOWN_COLOR
+    for lo, hi, lab in POP_CLASSES:
+        if lo <= pop < hi:
+            return POP_CLASS_COLORS[lab]
+    return POP_UNKNOWN_COLOR
+
+
+def pop_marker_size(pop) -> float:
+    """Log-scaled radius by population (500 -> ~1.5, 900k -> ~6.7)."""
+    if pop is None or pop != pop or pop < 500:
+        return 1.5
+    return 1.5 + 1.6 * math.log10(pop / 500.0)
+
 
 def load_roads() -> gpd.GeoDataFrame:
     roads = gpd.read_file(DATA)
@@ -133,6 +169,14 @@ def load_cities() -> gpd.GeoDataFrame:
     cities = gpd.GeoDataFrame(
         df, geometry=gpd.points_from_xy(df["Longitude (X)"], df["Latitude (Y)"]), crs=4326
     )
+    if POP_DATA.exists():
+        pop = pd.read_csv(POP_DATA).rename(columns={"primary_key": "Primary Key"})
+        cities = cities.merge(pop[["Primary Key", "population", "estimate_year", "source"]],
+                              on="Primary Key", how="left")
+        print(f"population estimates merged for {int(cities['population'].notna().sum())}"
+              f"/{len(cities)} cities")
+    else:
+        cities["population"], cities["estimate_year"], cities["source"] = float("nan"), "", ""
     print(f"loaded {len(cities)} Roman cities, {df['Province'].nunique()} provinces")
     return cities
 
@@ -360,6 +404,58 @@ def _greek_tribe(lat: float, lng: float, start: int, province: str):
     return None
 
 
+def _city_founder(c, founders: dict) -> str:
+    """Founder display string: curated override > Wikidata > regional power."""
+    if c["Ancient Toponym"] in FOUNDER_OVERRIDES:
+        return FOUNDER_OVERRIDES[c["Ancient Toponym"]]
+    founder = (founders or {}).get(str(c["Primary Key"]), "")
+    if not founder:
+        cq = _conquest_year(c["Province"])
+        if cq is not None and int(c["Start Date"]) < cq:
+            founder = (_greek_tribe(c.geometry.y, c.geometry.x,
+                                    int(c["Start Date"]), c["Province"])
+                       or _pre_roman_people(c["Province"]) or "")
+    return founder
+
+
+def foundation_nation(founder: str, row) -> str:
+    """Foundation-nation class for the third coloring scheme."""
+    if not founder:
+        cq = _conquest_year(row["Province"])
+        if cq is not None and int(row["Start Date"]) >= cq:
+            return "Roman"  # founded under Roman rule: colony or refoundation
+        return "Unknown"
+    low = founder.lower()
+    if "phoenician" in low or "hasdrubal" in low or "carthaginian" in low:
+        return "Phoenician"
+    if "etruscan" in low:
+        return "Etruscan"
+    if "latin" in low or "romulus" in low or "senius" in low:
+        return "Latin"
+    if any(k in low for k in ("greek", "dorian", "ionian", "achaean", "aeolian",
+                              "boeotian", "arcadian", "macedonian", "attalid",
+                              "seleucus", "philip", "demetrius", "androclus",
+                              "damon", "smyrna", "megara", "pellen")):
+        return "Greeks"
+    if "minoan" in low or "mycenaean" in low:
+        return "Pre-Greek (Minoan/Mycenaean)"
+    if "egyptian" in low:
+        return "Egyptian"
+    if any(k in low for k in ("gaul", "briton", "celt")):
+        return "Celtic / Gallic"
+    if "iberian" in low or "lusitanian" in low:
+        return "Iberian"
+    if any(k in low for k in ("illyrian", "thracian", "pannonian", "dacia")):
+        return "Illyrian-Thracian"
+    if any(k in low for k in ("seleucid", "hasmonean", "nabataean", "herod")):
+        return "Near Eastern"
+    if any(k in low for k in ("sicel", "sicanian", "italic", "samnite", "umbria",
+                              "iapygian", "lucanian", "picen", "ligur", "veneti",
+                              "insubr", "boii", "nuragic", "epirot")):
+        return "Italic (other)"
+    return "Unknown"
+
+
 def resolve_founders(cities, wiki_urls: dict) -> dict:
     """Primary Key -> founder label, for pre-conquest cities with a known founder.
 
@@ -476,11 +572,13 @@ def plot_base_map(roads: gpd.GeoDataFrame, cities: gpd.GeoDataFrame = None) -> N
     else:
         roads.plot(ax=ax, color="dimgray", linewidth=0.4)
     if cities is not None:
+        sizes = [3 * pop_marker_size(p) if p == p and p > 0 else rank_marker_size(r)
+                 for p, r in zip(cities["population"], cities["rank"])]
         cities.plot(ax=ax, color=[RANK_COLORS[r] for r in cities["rank"]], edgecolor="black",
-                    linewidth=0.2, markersize=[rank_marker_size(r) for r in cities["rank"]], zorder=3)
+                    linewidth=0.2, markersize=sizes, zorder=3)
         rank_handles = [Patch(facecolor=c, edgecolor="black", label=f"rank {r}")
                         for r, c in RANK_COLORS.items()]
-        ax.legend(handles=rank_handles, title="Cities by Barrington rank\n(1 = largest)",
+        ax.legend(handles=rank_handles, title="Cities by Barrington rank\n(1 = largest; size = population)",
                   loc="upper left", fontsize=8)
     ax.set_title("Roman Road Network (DARMC 2008) with Roman cities")
     ax.set_xlabel("longitude"); ax.set_ylabel("latitude")
@@ -572,8 +670,10 @@ def plot_hexmap(hexes: gpd.GeoDataFrame, roads: gpd.GeoDataFrame, rome, metric: 
                legend_kwds={"label": f"summed {metric}", "shrink": 0.6}, missing_kwds={"color": "lightgrey"})
     roads.plot(ax=ax, color="black", linewidth=0.3)
     if cities is not None:
+        sizes = [3 * pop_marker_size(p) if p == p and p > 0 else rank_marker_size(r) * 0.8
+                 for p, r in zip(cities["population"], cities["rank"])]
         cities.plot(ax=ax, color=[RANK_COLORS[r] for r in cities["rank"]], edgecolor="black",
-                    linewidth=0.1, markersize=[rank_marker_size(r) * 0.8 for r in cities["rank"]], zorder=3)
+                    linewidth=0.1, markersize=sizes, zorder=3)
     if rome is not None:
         rome.boundary.plot(ax=ax, color="white", linewidth=1.2)
     ax.set_title(f"Roman roads — summed {metric} per H3 hexagon")
@@ -587,8 +687,10 @@ def plot_italy_detail(roads: gpd.GeoDataFrame, cities: gpd.GeoDataFrame) -> None
     fig, ax = plt.subplots(figsize=(12, 12), dpi=150)
     roads.plot(ax=ax, color="dimgray", linewidth=1.0)
     major = cities[cities["rank"] <= 3]
+    sizes = [3 * pop_marker_size(p) if p == p and p > 0 else rank_marker_size(r)
+             for p, r in zip(major["population"], major["rank"])]
     major.plot(ax=ax, color=[RANK_COLORS[r] for r in major["rank"]], edgecolor="black",
-               linewidth=0.3, markersize=[rank_marker_size(r) for r in major["rank"]], zorder=3)
+               linewidth=0.3, markersize=sizes, zorder=3)
     for _, c in major[major["rank"] <= 2].iterrows():
         ax.annotate(c["Ancient Toponym"], (c.geometry.x, c.geometry.y),
                     xytext=(3, 3), textcoords="offset points", fontsize=8, color="black")
@@ -651,43 +753,71 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         fg.add_to(m)
 
     if cities is not None:
-        for connected, label in [
-            (True, f"Cities on roads (<= {CITY_CONNECT_KM} km)"),
-            (False, f"Cities off roads (> {CITY_CONNECT_KM} km)"),
-        ]:
-            fg = folium.FeatureGroup(name=label, show=connected)
-            for _, c in cities[cities["connected"] == connected].iterrows():
+        def info_for(c, name):
+            founder = _city_founder(c, founders or {})
+            founded = f"<br>founded by {founder}" if founder else ""
+            pop = c["population"]
+            pop_line = ""
+            if pop == pop and pop > 0:
+                yr = c["estimate_year"] if c["estimate_year"] == c["estimate_year"] else ""
+                pop_line = f"<br>Population: ~{int(pop):,} ({yr})" if yr else \
+                           f"<br>Population: ~{int(pop):,}"
+            return (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
+                    f"Established: {fmt_year(c['Start Date'])}{founded}{pop_line}<br>"
+                    f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}")
+
+        def radius_for(c):
+            pop = c["population"]
+            if pop == pop and pop > 0:
+                return pop_marker_size(pop)
+            return {1: 7, 2: 4.5, 3: 2.5, 4: 1.8, 5: 1.5}.get(c["rank"], 1.5)
+
+        schemes = [
+            ("Cities — Empire ranking (Barrington)", True,
+             lambda c: RANK_COLORS[c["rank"]]),
+            ("Cities — Population (c. AD 100-165)", False,
+             lambda c: pop_class_color(c["population"])),
+            ("Cities — Foundation nation", False,
+             lambda c: NATION_COLORS[foundation_nation(_city_founder(c, founders or {}), c)]),
+        ]
+        for label, shown, color_for in schemes:
+            fg = folium.FeatureGroup(name=label, show=shown)
+            for _, c in cities.iterrows():
                 name = c["Ancient Toponym"]
                 url = (wiki_urls or {}).get(str(c["Primary Key"]))
                 if url:
                     name = (f'<a class="city-link" href="{url}" '
                             f'target="_blank" rel="noopener noreferrer">{name}</a>')
-                toponym = c["Ancient Toponym"]
-                if toponym in FOUNDER_OVERRIDES:
-                    founder = FOUNDER_OVERRIDES[toponym]
-                else:
-                    founder = (founders or {}).get(str(c["Primary Key"]), "")
-                    if not founder:
-                        # no Wikidata founder: fall back to who ruled the region
-                        # before Rome, refined per Greek people where applicable
-                        cq = _conquest_year(c["Province"])
-                        if cq is not None and int(c["Start Date"]) < cq:
-                            founder = (_greek_tribe(c.geometry.y, c.geometry.x,
-                                                    int(c["Start Date"]), c["Province"])
-                                       or _pre_roman_people(c["Province"]) or "")
-                founded = f"<br>founded by {founder}" if founder else ""
-                info = (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
-                        f"Established: {fmt_year(c['Start Date'])}{founded}<br>"
-                        f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}")
+                info = info_for(c, name)
                 folium.CircleMarker(
                     location=[c.geometry.y, c.geometry.x],
-                    radius={1: 7, 2: 4.5, 3: 2.5, 4: 1.8, 5: 1.5}.get(c["rank"], 1.5),
+                    radius=radius_for(c),
                     color="#333333", weight=0.4, fill=True,
-                    fill_color=RANK_COLORS[c["rank"]], fill_opacity=0.9,
-                    popup=folium.Popup(info, max_width=280),
+                    fill_color=color_for(c), fill_opacity=0.9,
+                    **({"popup": folium.Popup(info, max_width=280)} if shown else {}),
                     tooltip=info,
                 ).add_to(fg)
             fg.add_to(m)
+
+        # combined legend panel for the three schemes
+        def swatches(colors):
+            return "".join(
+                f'<span style="display:inline-block;width:10px;height:10px;margin:0 4px 0 0;'
+                f'background:{c};border:1px solid #555;vertical-align:middle"></span>{lab}<br>'
+                for lab, c in colors.items())
+        legend = folium.Element(
+            '<div style="position:fixed;bottom:24px;right:24px;z-index:9999;background:'
+            'rgba(13,17,23,.92);color:#e6edf3;padding:10px 14px;border:1px solid #555;'
+            'border-radius:8px;font:11px/1.5 system-ui;max-width:230px">'
+            '<b>City color schemes</b> (switch in menu)<br><br>'
+            '<b>1. Empire ranking</b><br>' + swatches(
+                {f"rank {r}": c for r, c in RANK_COLORS.items()}) + '<br>'
+            '<b>2. Population</b><br>' + swatches(POP_CLASS_COLORS) +
+            '<span style="display:inline-block;width:10px;height:10px;margin:0 4px 0 0;'
+            f'background:{POP_UNKNOWN_COLOR};border:1px solid #555;vertical-align:middle"></span>'
+            'unknown<br><br>'
+            '<b>3. Foundation nation</b><br>' + swatches(NATION_COLORS) + '</div>')
+        m.get_root().html.add_child(legend)
 
     folium.Marker(ROME_POINT[::-1], tooltip="Rome", icon=folium.Icon(color="white", icon_color="black")).add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
@@ -722,6 +852,23 @@ def write_findings(hexes: pd.DataFrame, G: nx.Graph, cities: gpd.GeoDataFrame = 
               + ("**is** the top-degree cell — all roads lead to Rome." if top_deg == rome_cell
                  else f"is not the top cell by degree (top is `{top_deg}`), but the analysis above shows how dominant Rome is."),
               ""]
+
+    if cities is not None and "population" in cities.columns:
+        withpop = cities[cities["population"] == cities["population"]]
+        lines += ["## Cities by estimated population (c. AD 100-165)", "",
+                  f"Population estimates cover **{len(withpop)} of {len(cities)}** cities "
+                  f"(210 from Hanson & Ortman 2017 JRSI; 675 derived from Hanson 2016 built-up "
+                  f"areas via a density relation fitted on their published estimates "
+                  f"(pop = 44.5 x area^1.33, r2 = 0.985); 2 from Chandler/Modelski via "
+                  f"Reba et al. 2016, anchored to AD 100-200). All estimates refer to the same "
+                  f"1st-2nd century AD window.", "",
+                  "| rank | city | modern | province | population | source |",
+                  "|---|---|---|---|---|---|"]
+        for i, (_, r) in enumerate(withpop.nlargest(10, "population").iterrows(), 1):
+            lines.append(f"| {i} | {r['Ancient Toponym']} | {r['Modern Toponym']} | "
+                         f"{r['Province']} | ~{int(r['population']):,} | "
+                         f"{str(r['source']).split(' (')[0]} |")
+        lines += [""]
 
     if cities is not None:
         n_total, n_conn = len(cities), int(cities["connected"].sum())
