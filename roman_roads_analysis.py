@@ -20,6 +20,8 @@ import urllib.request
 from collections import deque
 from pathlib import Path
 
+from shapely.geometry import LineString, Point, mapping, shape
+
 import folium
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -28,7 +30,6 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import to_hex
 from matplotlib.patches import Patch
-from shapely.geometry import Point, mapping, shape
 
 import h3
 
@@ -752,6 +753,7 @@ def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd
     od = sorted(n for n in set(attach.values()) if weight.get(n, 0) > 0)
     btw = {n: 0.0 for n in attach.values()}
     reach = {n: 0.0 for n in attach.values()}
+    btw_all, edge_load = {}, {}
     total_pairs = 0.0
     for s in od:
         pred, dist = nx.dijkstra_predecessor_and_distance(H, s, weight="km")
@@ -770,8 +772,12 @@ def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd
                 cur = ps[0]
                 path.append(cur)
             for nd in path[1:-1]:
+                btw_all[nd] = btw_all.get(nd, 0.0) + w
                 if nd in btw:
                     btw[nd] += w
+            for a, b in zip(path[:-1], path[1:]):
+                key = (a, b) if a <= b else (b, a)
+                edge_load[key] = edge_load.get(key, 0.0) + w
 
     rows = []
     for idx, node in attach.items():
@@ -780,7 +786,18 @@ def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd
     df = pd.DataFrame(rows, columns=["Primary Key", "una_btw", "una_reach"])
     df.to_csv(OUT / "cities_una.csv", index=False)
     print("saved cities_una.csv")
-    return df
+
+    # network geometry colored by weighted path load (share of total pair weight)
+    nodes_gdf = gpd.GeoDataFrame(
+        {"load": [btw_all[n] / total_pairs for n in btw_all if btw_all[n] > 0]},
+        geometry=gpd.points_from_xy(*zip(*[n for n in btw_all if btw_all[n] > 0])),
+        crs=roads_metric.crs).to_crs(4326)
+    edges_gdf = gpd.GeoDataFrame(
+        {"load": [v / total_pairs for v in edge_load.values() if v > 0]},
+        geometry=[LineString(k) for k, v in edge_load.items() if v > 0],
+        crs=roads_metric.crs).to_crs(4326)
+    print(f"UNA network: {len(nodes_gdf)} busy junctions, {len(edges_gdf)} busy road edges")
+    return df, nodes_gdf, edges_gdf
 
 
 def empire_extent(roads_metric: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -875,7 +892,9 @@ def export_gexf(G: nx.Graph) -> None:
 
 
 def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
-                      wiki_urls: dict = None, founders: dict = None) -> None:
+                      wiki_urls: dict = None, founders: dict = None,
+                      una_edges: gpd.GeoDataFrame = None,
+                      una_nodes: gpd.GeoDataFrame = None) -> None:
     esri_dark = folium.TileLayer(
         tiles=("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
                "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"),
@@ -1011,6 +1030,42 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 ).add_to(fg)
             fg.add_to(m)
 
+        # UNA network layers: roads and junctions colorized by weighted path load
+        def _load_color(share):
+            if share > 0.05:
+                return RANK_COLORS[1]
+            if share > 0.02:
+                return RANK_COLORS[2]
+            if share > 0.005:
+                return RANK_COLORS[3]
+            return RANK_COLORS[4]
+
+        if una_edges is not None and len(una_edges):
+            peak = una_edges["load"].max()
+            fg_net = folium.FeatureGroup(name="UNA net — roads by weighted path load",
+                                         show=False)
+            for _, e in una_edges.iterrows():
+                v = e["load"] / peak
+                folium.PolyLine(
+                    [[lat, lng] for lng, lat in e.geometry.coords],
+                    color=_load_color(e["load"]), weight=1 + 2.5 * v, opacity=0.85,
+                    tooltip=f"road: {e['load'] * 100:.1f}% of weighted paths",
+                ).add_to(fg_net)
+            fg_net.add_to(m)
+        if una_nodes is not None and len(una_nodes):
+            peak = una_nodes["load"].max()
+            fg_jun = folium.FeatureGroup(name="UNA net — junctions by path traffic",
+                                         show=False)
+            for _, nd in una_nodes.iterrows():
+                v = nd["load"] / peak
+                folium.CircleMarker(
+                    [nd.geometry.y, nd.geometry.x],
+                    radius=2 + 5 * v, color="#333333", weight=0.3, fill=True,
+                    fill_color=_load_color(nd["load"]), fill_opacity=0.9,
+                    tooltip=f"junction: {nd['load'] * 100:.1f}% of weighted paths",
+                ).add_to(fg_jun)
+            fg_jun.add_to(m)
+
         # combined legend panel for the three schemes
         def swatches(colors):
             return "".join(
@@ -1042,21 +1097,34 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             'if(b&&g){b.addEventListener("click",function(){'
             'var h=g.style.display==="none";g.style.display=h?"block":"none";'
             'b.innerHTML=h?"\\u25BE Legend":"\\u25B4 Legend";});}'
-            # radio-group the three city schemes; native radios keep one checked,
-            # and the change handler removes the layers of the unchecked ones
-            'var want=["Empire ranking","Population (c. AD 100-165)","Foundation nation",'
-            '"UNA betweenness","UNA reach"];'
-            'var sel=[];'
+            # two radio groups (city schemes vs UNA) with section headers;
+            # picking in one group clears the other so one coloring shows at a time
+            'var groups={cityScheme:["Empire ranking","Population (c. AD 100-165)",'
+            '"Foundation nation"],cityUNA:["UNA betweenness","UNA reach"]};'
+            'var all=[];'
             'document.querySelectorAll(".leaflet-control-layers-overlays label")'
             '.forEach(function(l){var t=l.textContent||"";'
-            'if(want.some(function(w){return t.indexOf(w)>=0;})&&l.querySelector("input"))'
-            '{var i=l.querySelector("input");i.type="radio";i.name="cityScheme";sel.push(i);}});'
-            'sel.forEach(function(i){i.addEventListener("change",function(){'
-            'var mp=null;sel.forEach(function(j){if(j.layer&&j.layer._map){mp=j.layer._map;}});'
+            'var i=l.querySelector("input");if(!i){return;}'
+            'for(var g in groups){'
+            'if(groups[g].some(function(w){return t.indexOf(w)>=0;})){'
+            'i.type="radio";i.name=g;all.push({i:i,g:g,lab:l});break;}}});'
+            'all.forEach(function(o){o.i.addEventListener("change",function(){'
+            'all.forEach(function(p){if(p.g!==o.g){p.i.checked=false;}});'
+            'var mp=null;'
+            'all.forEach(function(p){if(p.i.layer&&p.i.layer._map){mp=p.i.layer._map;}});'
             'if(!mp){return;}'
-            'sel.forEach(function(j){if(!j.layer){return;}'
-            'if(j.checked&&!j.layer._map){mp.addLayer(j.layer);}'
-            'if(!j.checked&&j.layer._map){mp.removeLayer(j.layer);}});});});'
+            'all.forEach(function(p){var L=p.i.layer;if(!L){return;}'
+            'if(p.i.checked&&!L._map){mp.addLayer(L);}'
+            'if(!p.i.checked&&L._map){mp.removeLayer(L);}});});});'
+            'var cont=document.querySelector(".leaflet-control-layers-overlays");'
+            'function hdr(txt){var d=document.createElement("div");d.textContent=txt;'
+            'd.style.cssText="font-weight:600;margin:6px 0 2px;color:#8ab4f8;'
+            'border-top:1px solid #555;padding-top:6px";return d;}'
+            'var fm=null,fu=null;'
+            'all.forEach(function(o){if(!fm&&o.g==="cityScheme"){fm=o.lab;}'
+            'if(!fu&&o.g==="cityUNA"){fu=o.lab;}});'
+            'if(cont&&fu){cont.insertBefore(hdr("UNA ANALYSIS"),fu);}'
+            'if(cont&&fm){cont.insertBefore(hdr("CITY SCHEMES"),fm);}'
             '},200);});</script>')
         m.get_root().html.add_child(legend)
 
@@ -1167,8 +1235,8 @@ def main() -> None:
     plot_base_map(roads, cities)
     G = build_graph(roads, roads_raw.geometry.length / 1000)
     nodes = compute_centralities(G)
-    cities = cities.merge(una_analysis(cities, roads_raw),
-                          on="Primary Key", how="left")
+    una, una_nodes, una_edges = una_analysis(cities, roads_raw)
+    cities = cities.merge(una, on="Primary Key", how="left")
     extent = empire_extent(roads_raw)  # metric CRS buffer
     hexes = hex_scores(nodes, extent)
     rome, rome_kind = get_rome_boundary()
@@ -1178,7 +1246,8 @@ def main() -> None:
     export_gexf(G)
     wiki_urls = resolve_wiki_links(cities)
     founders = resolve_founders(cities, wiki_urls)
-    build_interactive(roads, hexes, rome, cities, wiki_urls, founders)
+    build_interactive(roads, hexes, rome, cities, wiki_urls, founders,
+                      una_edges, una_nodes)
     write_findings(hexes, G, cities)
     print("done.")
 
