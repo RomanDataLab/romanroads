@@ -55,6 +55,42 @@ Population estimates cover **887 of 1388** cities (210 from Hanson & Ortman 2017
 | 9 | Syracusae | Syracuse | Silicia | ~83,834 | Hanson & Ortman 2017 |
 | 10 | Arsinoe | Kom F?ris | Aegyptus | ~82,897 | Hanson 2016 area x density fit |
 
+## UNA weighted network centrality
+
+Urban Network Analysis methodology (City Form Lab, MIT) applied to the road network: cities act as population-weighted nodes on metric edges; **weighted betweenness** = share of population-weighted shortest paths between city pairs passing through a city; **reach (100 km)** = total city population within 100 network-km. 1173 of 1388 cities are on the network (snap limit 10 km).
+
+### Top cities by weighted betweenness
+
+| # | city | share of weighted paths | reach (100 km) |
+|---|---|---|---|
+| 1 | Aquileia | 41.7% | ~47,153 |
+| 2 | Concordia | 41.5% | ~91,968 |
+| 3 | Philippopolis (Thracia) | 39.5% | ~4,096 |
+| 4 | Hadrianopolis (Thracia) | 39.5% | ~0 |
+| 5 | Heraclea (Thracia) | 38.6% | ~0 |
+| 6 | Chalcedon | 37.9% | ~60,761 |
+| 7 | Byzantium | 37.9% | ~60,761 |
+| 8 | Nicomedia | 36.9% | ~59,495 |
+| 9 | Nicaea | 36.8% | ~60,761 |
+| 10 | Cibalae | 35.2% | ~22,247 |
+
+### Top cities by reach (100 km)
+
+| # | city | reach (100 km) | weighted betweenness |
+|---|---|---|---|
+| 1 | Veii | ~1,155,750 | 0.6% |
+| 2 | Ferentinum | ~1,148,423 | 4.6% |
+| 3 | Portus | ~1,144,410 | 0.5% |
+| 4 | Aletrium | ~1,142,151 | 0.0% |
+| 5 | Verulae | ~1,142,151 | 0.0% |
+| 6 | Tusculum | ~1,136,587 | 0.0% |
+| 7 | Praeneste | ~1,135,857 | 0.1% |
+| 8 | Gabii | ~1,135,046 | 0.1% |
+| 9 | Fidenae | ~1,133,857 | 0.3% |
+| 10 | Baccanae | ~1,128,715 | 2.7% |
+
+Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 2008 with edge weights in km (Lambert Conformal Conic); weights = population estimates (see section above).
+
 ## Roman cities connected by the roads
 
 Of **1388** known Roman cities (Hanson 2016, 100 BC – AD 300), **1105 (80%)** lie within 5 km of a DARMC road.
