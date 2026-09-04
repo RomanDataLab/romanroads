@@ -126,18 +126,72 @@ POP_CLASS_COLORS = {lab: to_hex(plt.get_cmap("YlOrRd")(v)) for (_, _, lab), v in
                     zip(POP_CLASSES, [0.15, 0.35, 0.55, 0.75, 0.95])}
 POP_UNKNOWN_COLOR = "#9a9a9a"
 
-# Foundation-nation classes for the third coloring scheme (Greek tribes separate)
-NATION_COLORS = {
-    "Roman": "#e74c3c",
-    "Greeks — Dorians": "#21618c", "Greeks — Ionians": "#3498db",
-    "Greeks — Achaeans": "#7fb3d5", "Greeks — Aeolians": "#a9cce3",
-    "Greeks — Macedonians": "#5b2c6f", "Greeks (other)": "#d4e6f1",
-    "Phoenician": "#a569bd", "Etruscan": "#e67e22", "Latin": "#17a589",
-    "Italic (other)": "#909497", "Egyptian": "#f4d03f",
-    "Celtic / Gallic": "#28b463", "Iberian": "#f1948a",
-    "Illyrian-Thracian": "#f39c12", "Near Eastern": "#d2b48c",
-    "Pre-Greek (Minoan/Mycenaean)": "#af601a", "Unknown": "#bfc9ca",
+# Foundation-nation classes mirror the popup "founded by" labels: one class per
+# tribe/nation; Greek tribes get " (Greeks)" appended. Colors curated for the
+# largest classes, generated (golden-angle hues) for the rest.
+_NATION_BASE_COLORS = {
+    "Roman": "#e74c3c", "Unknown": "#bfc9ca",
+    "Dorians (Greeks)": "#1b4f72", "Ionians (Greeks)": "#2e86c1",
+    "Achaeans (Greeks)": "#5dade2", "Aeolians (Greeks)": "#85c1e9",
+    "Boeotians (Greeks)": "#a9cce3", "Arcadians (Greeks)": "#d4e6f1",
+    "Macedonians (Greeks)": "#4a235a", "Attalids (Greeks)": "#8e7cc3",
+    "Epirotes (Greeks)": "#bb8fce", "Greeks (other)": "#eaf2f8",
+    "Phoenicians": "#9b59b6", "Carthaginians": "#af7ac5",
+    "Etruscans": "#e67e22", "Latins": "#17a589",
+    "ancient Egyptians": "#f4d03f", "Gauls": "#28b463", "Britons": "#58d68d",
+    "Iberians": "#f1948a", "Illyrians": "#f39c12", "Thracians": "#f5b041",
+    "Minoans": "#af601a", "Mycenaeans": "#ca6f1e", "Judaeans": "#d2b48c",
 }
+
+_GREEK_TRIBE_LABELS = {
+    "Dorians": "Dorians (Greeks)", "Ionians": "Ionians (Greeks)",
+    "Achaeans": "Achaeans (Greeks)", "Aeolians": "Aeolians (Greeks)",
+    "Boeotians": "Boeotians (Greeks)", "Arcadians": "Arcadians (Greeks)",
+    "Macedonians": "Macedonians (Greeks)", "Attalid Greeks": "Attalids (Greeks)",
+    "Epirotes": "Epirotes (Greeks)", "ancient Greeks": "Greeks (other)",
+}
+
+_INDIVIDUAL_FOUNDERS = {
+    "Romulus and Remus": "Latins", "Senius and Aschius": "Latins",
+    "Philip II of Macedon": "Macedonians (Greeks)",
+    "Demetrius I of Macedon": "Macedonians (Greeks)",
+    "Seleucus I Nicator": "Macedonians (Greeks)",
+    "Androclus": "Ionians (Greeks)", "Damon of Athens": "Ionians (Greeks)",
+    "Pellen": "Achaeans (Greeks)", "Megara Hyblaea": "Dorians (Greeks)",
+    "Smyrna": "Aeolians (Greeks)", "Hasdrubal the Fair": "Phoenicians",
+    "Herod Archelaus": "Judaeans",
+}
+
+
+def foundation_nation(founder: str, row) -> str:
+    """Foundation nation/tribe for the third coloring scheme — same label the
+    popup card shows (Greek tribes suffixed ' (Greeks)')."""
+    if not founder:
+        cq = _conquest_year(row["Province"])
+        if cq is not None and int(row["Start Date"]) >= cq:
+            return "Roman"  # founded under Roman rule: colony or refoundation
+        return "Unknown"
+    if founder in _INDIVIDUAL_FOUNDERS:
+        return _INDIVIDUAL_FOUNDERS[founder]
+    label = founder.strip()
+    if label.lower().startswith("the "):
+        label = label[4:]
+    if label.startswith("Phoenicians"):  # 'Phoenicians (Tyre)' -> 'Phoenicians'
+        return "Phoenicians"
+    return _GREEK_TRIBE_LABELS.get(label, label)
+
+
+def nation_colors(cities, founders: dict) -> dict:
+    """Label -> color for every foundation-nation class present in the data."""
+    labels = {foundation_nation(_city_founder(c, founders or {}), c)
+              for _, c in cities.iterrows()}
+    colors = {lab: _NATION_BASE_COLORS[lab] for lab in labels if lab in _NATION_BASE_COLORS}
+    import colorsys
+    for i, lab in enumerate(sorted(labels - set(colors))):
+        h = (i * 137.508) % 360 / 360.0
+        r, g, b = colorsys.hls_to_rgb(h, 0.55, 0.55)
+        colors[lab] = f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+    return dict(sorted(colors.items()))
 
 
 def pop_class_color(pop):
@@ -422,51 +476,6 @@ def _city_founder(c, founders: dict) -> str:
     return founder
 
 
-def foundation_nation(founder: str, row) -> str:
-    """Foundation-nation class for the third coloring scheme."""
-    if not founder:
-        cq = _conquest_year(row["Province"])
-        if cq is not None and int(row["Start Date"]) >= cq:
-            return "Roman"  # founded under Roman rule: colony or refoundation
-        return "Unknown"
-    low = founder.lower()
-    if "phoenician" in low or "hasdrubal" in low or "carthaginian" in low:
-        return "Phoenician"
-    if "etruscan" in low:
-        return "Etruscan"
-    if "latin" in low or "romulus" in low or "senius" in low:
-        return "Latin"
-    if "dorian" in low or "megara" in low:
-        return "Greeks — Dorians"
-    if "ionian" in low or "androclus" in low or "damon of athens" in low:
-        return "Greeks — Ionians"
-    if "achaean" in low or "pellen" in low:
-        return "Greeks — Achaeans"
-    if "aeolian" in low:
-        return "Greeks — Aeolians"
-    if "macedonian" in low or "seleucus" in low or "philip" in low or "demetrius" in low:
-        return "Greeks — Macedonians"
-    if any(k in low for k in ("greek", "boeotian", "arcadian", "attalid", "smyrna")):
-        return "Greeks (other)"
-    if "minoan" in low or "mycenaean" in low:
-        return "Pre-Greek (Minoan/Mycenaean)"
-    if "egyptian" in low:
-        return "Egyptian"
-    if any(k in low for k in ("gaul", "briton", "celt")):
-        return "Celtic / Gallic"
-    if "iberian" in low or "lusitanian" in low:
-        return "Iberian"
-    if any(k in low for k in ("illyrian", "thracian", "pannonian", "dacia")):
-        return "Illyrian-Thracian"
-    if any(k in low for k in ("seleucid", "hasmonean", "nabataean", "herod")):
-        return "Near Eastern"
-    if any(k in low for k in ("sicel", "sicanian", "italic", "samnite", "umbria",
-                              "iapygian", "lucanian", "picen", "ligur", "veneti",
-                              "insubr", "boii", "nuragic", "epirot")):
-        return "Italic (other)"
-    return "Unknown"
-
-
 def resolve_founders(cities, wiki_urls: dict) -> dict:
     """Primary Key -> founder label, for pre-conquest cities with a known founder.
 
@@ -745,7 +754,8 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         ".leaflet-top.leaflet-right{margin-top:34px}"
         ".leaflet-down.leaflet-right{position:fixed;bottom:24px;right:24px;z-index:9999;"
         "background:rgba(0,0,0,.5);color:#e6edf3;padding:10px 14px;"
-        "border:1px solid #555;border-radius:8px;font:11px/1.5 system-ui;max-width:230px}"
+        "border:1px solid #555;border-radius:8px;font:11px/1.5 system-ui;max-width:230px;"
+        "max-height:70vh;overflow-y:auto}"
         "#legendToggle{position:fixed;top:12px;right:12px;z-index:10000;"
         "background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
         "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui}"
@@ -796,13 +806,14 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 return pop_marker_size(pop)
             return {1: 7, 2: 4.5, 3: 2.5, 4: 1.8, 5: 1.5}.get(c["rank"], 1.5)
 
+        nation_cols = nation_colors(cities, founders or {})
         schemes = [
             ("Cities — Empire ranking (Barrington)", True,
              lambda c: RANK_COLORS[c["rank"]]),
             ("Cities — Population (c. AD 100-165)", False,
              lambda c: pop_class_color(c["population"])),
             ("Cities — Foundation nation", False,
-             lambda c: NATION_COLORS[foundation_nation(_city_founder(c, founders or {}), c)]),
+             lambda c: nation_cols[foundation_nation(_city_founder(c, founders or {}), c)]),
         ]
         for label, shown, color_for in schemes:
             fg = folium.FeatureGroup(name=label, show=shown)
@@ -838,7 +849,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             '<span style="display:inline-block;width:10px;height:10px;margin:0 4px 0 0;'
             f'background:{POP_UNKNOWN_COLOR};border:1px solid #555;vertical-align:middle"></span>'
             'unknown<br><br>'
-            '<b>3. Foundation nation</b><br>' + swatches(NATION_COLORS) + '</div>'
+            '<b>3. Foundation nation</b><br>' + swatches(nation_cols) + '</div>'
             '<button id="legendToggle" title="Roll legend up/down">&#9662; Legend</button>'
             '<script>window.addEventListener("load",function(){setTimeout(function(){'
             'var b=document.getElementById("legendToggle"),'
