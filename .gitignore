@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 cache/
 .zcode/
+output/_una_corridor.png

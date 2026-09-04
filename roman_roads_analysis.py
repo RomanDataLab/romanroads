@@ -679,10 +679,17 @@ def _planar_graph(roads_metric: gpd.GeoDataFrame) -> nx.Graph:
     return G
 
 
-def _contract_chains(G: nx.Graph, protected: set) -> nx.Graph:
+def _contract_chains(G: nx.Graph, protected: set):
     """Remove unprotected degree-2 nodes, summing edge lengths — leaves a
-    junction-only graph (cities and true junctions as nodes)."""
+    junction-only graph (cities and true junctions as nodes). Also returns,
+    for every contracted edge, the ordered chain of original planar nodes it
+    spans, so path loads can be distributed back to the real road chunks."""
     G = G.copy()
+
+    def ek(a, b):
+        return (a, b) if a <= b else (b, a)
+
+    chains = {ek(u, v): [u, v] for u, v in G.edges()}
     degree2 = [n for n in G if G.degree(n) == 2 and n not in protected]
     queue = deque(degree2)
     while queue:
@@ -693,15 +700,21 @@ def _contract_chains(G: nx.Graph, protected: set) -> nx.Graph:
         if a == b:
             G.remove_node(n)
             continue
+        ca = chains.pop(ek(a, n))
+        cb = chains.pop(ek(n, b))
+        if ca[0] != a:
+            ca = ca[::-1]
+        if cb[0] != n:
+            cb = cb[::-1]
         w = G[n][a]["km"] + G[n][b]["km"]
-        if G.has_edge(a, b):
-            if w < G[a][b]["km"]:
-                G[a][b]["km"] = w
-        else:
+        if not G.has_edge(a, b):
+            chains[ek(a, b)] = ca + cb[1:]
             G.add_edge(a, b, km=w)
+        elif w < G[a][b]["km"]:
+            G[a][b]["km"] = w
         G.remove_node(n)
     print(f"contracted to {G.number_of_nodes()} junction nodes, {G.number_of_edges()} edges")
-    return G
+    return G, chains
 
 
 def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd.DataFrame:
@@ -749,7 +762,7 @@ def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd
     print(f"UNA: {len(attach)} cities on network (<= {UNA_SNAP_KM} km), "
           f"{len(cities) - len(attach)} off-network")
 
-    H = _contract_chains(P, set(attach.values()))
+    H, chains = _contract_chains(P, set(attach.values()))
     od = sorted(n for n in set(attach.values()) if weight.get(n, 0) > 0)
     btw = {n: 0.0 for n in attach.values()}
     reach = {n: 0.0 for n in attach.values()}
@@ -792,13 +805,22 @@ def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd
         {"load": [btw_all[n] / total_pairs for n in btw_all if btw_all[n] > 0]},
         geometry=gpd.points_from_xy(*zip(*[n for n in btw_all if btw_all[n] > 0])),
         crs=roads_metric.crs).to_crs(4326)
-    # attribute busy sub-edges back to the ORIGINAL road chunks: the midpoint of
-    # each sub-edge lies strictly on its source chunk, so nearest-road snapping
-    # is exact; a road's load = max load among its busy sub-edges. The index
-    # aligns with the original GeoDataFrame row order (to_crs preserves it).
+    # attribute busy sub-edges back to the ORIGINAL road chunks: expand every
+    # contracted edge to its planar chain (each planar sub-edge lies on exactly
+    # one chunk), then snap each sub-edge's midpoint to that chunk (exact, the
+    # midpoint is interior). A chunk's load = max over its busy sub-edges.
+    planar_edge_load = {}
+    for (a, b), w in edge_load.items():
+        key = (a, b) if a <= b else (b, a)
+        seq = chains.get(key, [a, b])
+        if seq[0] != a:
+            seq = seq[::-1]
+        for u, v in zip(seq[:-1], seq[1:]):
+            pk = (u, v) if u <= v else (v, u)
+            planar_edge_load[pk] = planar_edge_load.get(pk, 0.0) + w
     busy = gpd.GeoDataFrame(
-        {"load": [v / total_pairs for v in edge_load.values() if v > 0]},
-        geometry=[LineString(k) for k, v in edge_load.items() if v > 0],
+        {"load": [v / total_pairs for v in planar_edge_load.values() if v > 0]},
+        geometry=[LineString(k) for k, v in planar_edge_load.items() if v > 0],
         crs=roads_metric.crs)
     mids = gpd.GeoDataFrame(
         {"load": busy["load"].values},
