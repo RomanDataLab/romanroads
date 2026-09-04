@@ -126,13 +126,17 @@ POP_CLASS_COLORS = {lab: to_hex(plt.get_cmap("YlOrRd")(v)) for (_, _, lab), v in
                     zip(POP_CLASSES, [0.15, 0.35, 0.55, 0.75, 0.95])}
 POP_UNKNOWN_COLOR = "#9a9a9a"
 
-# Foundation-nation classes for the third coloring scheme
+# Foundation-nation classes for the third coloring scheme (Greek tribes separate)
 NATION_COLORS = {
-    "Roman": "#e74c3c", "Greeks": "#3498db", "Phoenician": "#9b59b6",
-    "Etruscan": "#e67e22", "Latin": "#1abc9c", "Italic (other)": "#95a5a6",
-    "Egyptian": "#f4d03f", "Celtic / Gallic": "#2ecc71", "Iberian": "#d7bde2",
-    "Illyrian-Thracian": "#f5b041", "Near Eastern": "#d2b48c",
-    "Pre-Greek (Minoan/Mycenaean)": "#f0b27a", "Unknown": "#bdc3c7",
+    "Roman": "#e74c3c",
+    "Greeks — Dorians": "#21618c", "Greeks — Ionians": "#3498db",
+    "Greeks — Achaeans": "#7fb3d5", "Greeks — Aeolians": "#a9cce3",
+    "Greeks — Macedonians": "#5b2c6f", "Greeks (other)": "#d4e6f1",
+    "Phoenician": "#a569bd", "Etruscan": "#e67e22", "Latin": "#17a589",
+    "Italic (other)": "#909497", "Egyptian": "#f4d03f",
+    "Celtic / Gallic": "#28b463", "Iberian": "#f1948a",
+    "Illyrian-Thracian": "#f39c12", "Near Eastern": "#d2b48c",
+    "Pre-Greek (Minoan/Mycenaean)": "#af601a", "Unknown": "#bfc9ca",
 }
 
 
@@ -432,11 +436,18 @@ def foundation_nation(founder: str, row) -> str:
         return "Etruscan"
     if "latin" in low or "romulus" in low or "senius" in low:
         return "Latin"
-    if any(k in low for k in ("greek", "dorian", "ionian", "achaean", "aeolian",
-                              "boeotian", "arcadian", "macedonian", "attalid",
-                              "seleucus", "philip", "demetrius", "androclus",
-                              "damon", "smyrna", "megara", "pellen")):
-        return "Greeks"
+    if "dorian" in low or "megara" in low:
+        return "Greeks — Dorians"
+    if "ionian" in low or "androclus" in low or "damon of athens" in low:
+        return "Greeks — Ionians"
+    if "achaean" in low or "pellen" in low:
+        return "Greeks — Achaeans"
+    if "aeolian" in low:
+        return "Greeks — Aeolians"
+    if "macedonian" in low or "seleucus" in low or "philip" in low or "demetrius" in low:
+        return "Greeks — Macedonians"
+    if any(k in low for k in ("greek", "boeotian", "arcadian", "attalid", "smyrna")):
+        return "Greeks (other)"
     if "minoan" in low or "mycenaean" in low:
         return "Pre-Greek (Minoan/Mycenaean)"
     if "egyptian" in low:
@@ -724,8 +735,21 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         name="Esri labels", overlay=True, control=False,
     ).add_to(m)
     m.get_root().header.add_child(folium.Element(
-        "<style>.city-link{color:#4d9fff;font-weight:600;text-decoration:none}"
-        ".city-link:hover{color:#1a56db;text-decoration:underline}</style>"))
+        "<style>"
+        ".city-link{color:#4d9fff;font-weight:600;text-decoration:none}"
+        ".city-link:hover{color:#1a56db;text-decoration:underline}"
+        ".leaflet-top.leaflet-right .leaflet-control-layers,"
+        ".leaflet-top.leaflet-right .leaflet-control-layers-expanded{"
+        "background:rgba(0,0,0,.5);color:#e6edf3}"
+        ".leaflet-control-layers label{color:#e6edf3}"
+        ".leaflet-top.leaflet-right{margin-top:34px}"
+        ".leaflet-down.leaflet-right{position:fixed;bottom:24px;right:24px;z-index:9999;"
+        "background:rgba(0,0,0,.5);color:#e6edf3;padding:10px 14px;"
+        "border:1px solid #555;border-radius:8px;font:11px/1.5 system-ui;max-width:230px}"
+        "#legendToggle{position:fixed;top:12px;right:12px;z-index:10000;"
+        "background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
+        "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui}"
+        "</style>"))
     folium.TileLayer("openstreetmap", name="OSM", show=False).add_to(m)
 
     roads_simpl = roads.copy()
@@ -739,7 +763,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
 
     cmap = plt.get_cmap("RdYlGn")
     for metric, label in [("degree", "Degree (summed)"), ("betweenness", "Betweenness (summed)")]:
-        fg = folium.FeatureGroup(name=label, show=False)
+        fg = folium.FeatureGroup(name=label, show=False, control=False)
         vmax = hexes[metric].max()
         for _, row in hexes.iterrows():
             if row[metric] <= 0:
@@ -806,17 +830,37 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 f'background:{c};border:1px solid #555;vertical-align:middle"></span>{lab}<br>'
                 for lab, c in colors.items())
         legend = folium.Element(
-            '<div style="position:fixed;bottom:24px;right:24px;z-index:9999;background:'
-            'rgba(13,17,23,.92);color:#e6edf3;padding:10px 14px;border:1px solid #555;'
-            'border-radius:8px;font:11px/1.5 system-ui;max-width:230px">'
-            '<b>City color schemes</b> (switch in menu)<br><br>'
+            '<div class="leaflet-down leaflet-right" id="cityLegend">'
+            '<b>City color schemes</b> (radio: pick one)<br><br>'
             '<b>1. Empire ranking</b><br>' + swatches(
                 {f"rank {r}": c for r, c in RANK_COLORS.items()}) + '<br>'
             '<b>2. Population</b><br>' + swatches(POP_CLASS_COLORS) +
             '<span style="display:inline-block;width:10px;height:10px;margin:0 4px 0 0;'
             f'background:{POP_UNKNOWN_COLOR};border:1px solid #555;vertical-align:middle"></span>'
             'unknown<br><br>'
-            '<b>3. Foundation nation</b><br>' + swatches(NATION_COLORS) + '</div>')
+            '<b>3. Foundation nation</b><br>' + swatches(NATION_COLORS) + '</div>'
+            '<button id="legendToggle" title="Roll legend up/down">&#9662; Legend</button>'
+            '<script>window.addEventListener("load",function(){setTimeout(function(){'
+            'var b=document.getElementById("legendToggle"),'
+            'g=document.getElementById("cityLegend");'
+            'if(b&&g){b.addEventListener("click",function(){'
+            'var h=g.style.display==="none";g.style.display=h?"block":"none";'
+            'b.innerHTML=h?"\\u25BE Legend":"\\u25B4 Legend";});}'
+            # radio-group the three city schemes; native radios keep one checked,
+            # and the change handler removes the layers of the unchecked ones
+            'var want=["Empire ranking","Population (c. AD 100-165)","Foundation nation"];'
+            'var sel=[];'
+            'document.querySelectorAll(".leaflet-control-layers-overlays label")'
+            '.forEach(function(l){var t=l.textContent||"";'
+            'if(want.some(function(w){return t.indexOf(w)>=0;})&&l.querySelector("input"))'
+            '{var i=l.querySelector("input");i.type="radio";i.name="cityScheme";sel.push(i);}});'
+            'sel.forEach(function(i){i.addEventListener("change",function(){'
+            'var mp=null;sel.forEach(function(j){if(j.layer&&j.layer._map){mp=j.layer._map;}});'
+            'if(!mp){return;}'
+            'sel.forEach(function(j){if(!j.layer){return;}'
+            'if(j.checked&&!j.layer._map){mp.addLayer(j.layer);}'
+            'if(!j.checked&&j.layer._map){mp.removeLayer(j.layer);}});});});'
+            '},200);});</script>')
         m.get_root().html.add_child(legend)
 
     folium.Marker(ROME_POINT[::-1], tooltip="Rome", icon=folium.Icon(color="white", icon_color="black")).add_to(m)
