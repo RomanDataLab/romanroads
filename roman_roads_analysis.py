@@ -113,17 +113,17 @@ H3_RES = 3
 BUFFER_KM = 20
 CITY_CONNECT_KM = 5  # max distance from a city to the nearest road to count as connected
 
-# Barrington rank 1 (Rome-sized) -> 5 (minor): deep red to pale yellow
+# Barrington rank 1 (Rome-sized) -> 5 (minor): dark red, orange, amber, yellow, pale
 RANK_COLORS = {r: to_hex(plt.get_cmap("YlOrRd")(v)) for r, v in
-               zip(range(1, 6), [0.95, 0.75, 0.55, 0.35, 0.15])}
+               zip(range(1, 6), [0.9, 0.55, 0.35, 0.18, 0.06])}
 
-# Population classes (persons, c. AD 100-165 estimates): pale yellow -> deep red
+# Population classes (persons, c. AD 100-165 estimates): same spread as ranks
 POP_CLASSES = [  # (min, max, label)
     (0, 5000, "< 5k"), (5000, 15000, "5-15k"), (15000, 50000, "15-50k"),
     (50000, 150000, "50-150k"), (150000, float("inf"), "> 150k"),
 ]
 POP_CLASS_COLORS = {lab: to_hex(plt.get_cmap("YlOrRd")(v)) for (_, _, lab), v in
-                    zip(POP_CLASSES, [0.15, 0.35, 0.55, 0.75, 0.95])}
+                    zip(POP_CLASSES, [0.9, 0.55, 0.35, 0.18, 0.06])}
 POP_UNKNOWN_COLOR = "#9a9a9a"
 
 # Foundation-nation classes mirror the popup "founded by" labels: one class per
@@ -749,13 +749,13 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         ".city-link:hover{color:#1a56db;text-decoration:underline}"
         ".leaflet-top.leaflet-right .leaflet-control-layers,"
         ".leaflet-top.leaflet-right .leaflet-control-layers-expanded{"
-        "background:rgba(0,0,0,.5);color:#e6edf3}"
-        ".leaflet-control-layers label{color:#e6edf3}"
+        "background:rgba(0,0,0,.5);color:#e6edf3;width:230px;box-sizing:border-box}"
+        ".leaflet-control-layers label{color:#e6edf3;white-space:normal}"
         ".leaflet-top.leaflet-right{margin-top:34px}"
         ".leaflet-down.leaflet-right{position:fixed;bottom:24px;right:24px;z-index:9999;"
         "background:rgba(0,0,0,.5);color:#e6edf3;padding:10px 14px;"
-        "border:1px solid #555;border-radius:8px;font:11px/1.5 system-ui;max-width:230px;"
-        "max-height:70vh;overflow-y:auto}"
+        "border:1px solid #555;border-radius:8px;font:11px/1.5 system-ui;width:230px;"
+        "box-sizing:border-box;max-height:70vh;overflow-y:auto}"
         "#legendToggle{position:fixed;top:12px;right:12px;z-index:10000;"
         "background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
         "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui}"
