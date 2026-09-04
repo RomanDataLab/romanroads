@@ -792,12 +792,25 @@ def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd
         {"load": [btw_all[n] / total_pairs for n in btw_all if btw_all[n] > 0]},
         geometry=gpd.points_from_xy(*zip(*[n for n in btw_all if btw_all[n] > 0])),
         crs=roads_metric.crs).to_crs(4326)
-    edges_gdf = gpd.GeoDataFrame(
+    # attribute busy sub-edges back to the ORIGINAL road chunks: the midpoint of
+    # each sub-edge lies strictly on its source chunk, so nearest-road snapping
+    # is exact; a road's load = max load among its busy sub-edges. The index
+    # aligns with the original GeoDataFrame row order (to_crs preserves it).
+    busy = gpd.GeoDataFrame(
         {"load": [v / total_pairs for v in edge_load.values() if v > 0]},
         geometry=[LineString(k) for k, v in edge_load.items() if v > 0],
-        crs=roads_metric.crs).to_crs(4326)
-    print(f"UNA network: {len(nodes_gdf)} busy junctions, {len(edges_gdf)} busy road edges")
-    return df, nodes_gdf, edges_gdf
+        crs=roads_metric.crs)
+    mids = gpd.GeoDataFrame(
+        {"load": busy["load"].values},
+        geometry=[g.interpolate(0.5, normalized=True) for g in busy.geometry],
+        crs=roads_metric.crs)
+    near = gpd.sjoin_nearest(mids, roads_metric.reset_index(drop=True)[["geometry"]])
+    near = near[~near.index.duplicated(keep="first")]
+    road_load = near.groupby("index_right")["load"].max()
+    road_load.index = road_load.index.astype(int)
+    print(f"UNA network: {len(nodes_gdf)} busy junctions, "
+          f"{len(road_load)} of {len(roads_metric)} road chunks carry traffic")
+    return df, nodes_gdf, road_load
 
 
 def empire_extent(roads_metric: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -893,8 +906,7 @@ def export_gexf(G: nx.Graph) -> None:
 
 def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                       wiki_urls: dict = None, founders: dict = None,
-                      una_edges: gpd.GeoDataFrame = None,
-                      una_nodes: gpd.GeoDataFrame = None) -> None:
+                      road_load=None, una_nodes: gpd.GeoDataFrame = None) -> None:
     esri_dark = folium.TileLayer(
         tiles=("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
                "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"),
@@ -1030,7 +1042,8 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 ).add_to(fg)
             fg.add_to(m)
 
-        # UNA network layers: roads and junctions colorized by weighted path load
+        # UNA network layers: ORIGINAL road chunks colorized by weighted path
+        # load (same geometry as the base roads layer), plus busy junctions
         def _load_color(share):
             if share > 0.05:
                 return RANK_COLORS[1]
@@ -1040,17 +1053,24 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 return RANK_COLORS[3]
             return RANK_COLORS[4]
 
-        if una_edges is not None and len(una_edges):
-            peak = una_edges["load"].max()
+        if road_load is not None and len(road_load):
+            peak = road_load.max()
             fg_net = folium.FeatureGroup(name="UNA net — roads by weighted path load",
                                          show=False)
-            for _, e in una_edges.iterrows():
-                v = e["load"] / peak
-                folium.PolyLine(
-                    [[lat, lng] for lng, lat in e.geometry.coords],
-                    color=_load_color(e["load"]), weight=1 + 2.5 * v, opacity=0.85,
-                    tooltip=f"road: {e['load'] * 100:.1f}% of weighted paths",
-                ).add_to(fg_net)
+            for i, geom in enumerate(roads.geometry):
+                share = road_load.get(i, 0.0)
+                if share > 0:
+                    folium.PolyLine(
+                        [[lat, lng] for lng, lat in geom.coords],
+                        color=_load_color(share), weight=1 + 2.5 * (share / peak),
+                        opacity=0.85,
+                        tooltip=f"road: {share * 100:.1f}% of weighted paths",
+                    ).add_to(fg_net)
+                else:
+                    folium.PolyLine(
+                        [[lat, lng] for lng, lat in geom.coords],
+                        color="#3a3a3a", weight=0.4, opacity=0.6,
+                    ).add_to(fg_net)
             fg_net.add_to(m)
         if una_nodes is not None and len(una_nodes):
             peak = una_nodes["load"].max()
@@ -1235,7 +1255,7 @@ def main() -> None:
     plot_base_map(roads, cities)
     G = build_graph(roads, roads_raw.geometry.length / 1000)
     nodes = compute_centralities(G)
-    una, una_nodes, una_edges = una_analysis(cities, roads_raw)
+    una, una_nodes, road_load = una_analysis(cities, roads_raw)
     cities = cities.merge(una, on="Primary Key", how="left")
     extent = empire_extent(roads_raw)  # metric CRS buffer
     hexes = hex_scores(nodes, extent)
@@ -1247,7 +1267,7 @@ def main() -> None:
     wiki_urls = resolve_wiki_links(cities)
     founders = resolve_founders(cities, wiki_urls)
     build_interactive(roads, hexes, rome, cities, wiki_urls, founders,
-                      una_edges, una_nodes)
+                      road_load, una_nodes)
     write_findings(hexes, G, cities)
     print("done.")
 
