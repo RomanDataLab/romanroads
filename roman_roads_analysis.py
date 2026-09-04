@@ -752,13 +752,16 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         "background:rgba(0,0,0,.5);color:#e6edf3;width:230px;box-sizing:border-box}"
         ".leaflet-control-layers label{color:#e6edf3;white-space:normal}"
         ".leaflet-top.leaflet-right{margin-top:34px}"
-        ".leaflet-down.leaflet-right{position:fixed;bottom:24px;right:24px;z-index:9999;"
-        "background:rgba(0,0,0,.5);color:#e6edf3;padding:10px 14px;"
-        "border:1px solid #555;border-radius:8px;font:11px/1.5 system-ui;width:230px;"
-        "box-sizing:border-box;max-height:70vh;overflow-y:auto}"
-        "#legendToggle{position:fixed;top:12px;right:12px;z-index:10000;"
+        ".project-title{position:fixed;top:12px;right:12px;z-index:10000;"
         "background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
-        "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui}"
+        "border-radius:6px;padding:4px 10px;font:12px system-ui;width:230px;"
+        "box-sizing:border-box;text-align:center}"
+        ".leaflet-down.leaflet-right{background:rgba(0,0,0,.5);color:#e6edf3;"
+        "padding:10px 14px;border:1px solid #555;border-radius:8px;"
+        "font:11px/1.5 system-ui;box-sizing:border-box;max-height:70vh;overflow-y:auto}"
+        "#legendToggle{background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
+        "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui;"
+        "width:100%;box-sizing:border-box}"
         "</style>"))
     folium.TileLayer("openstreetmap", name="OSM", show=False).add_to(m)
 
@@ -841,6 +844,10 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 f'background:{c};border:1px solid #555;vertical-align:middle"></span>{lab}<br>'
                 for lab, c in colors.items())
         legend = folium.Element(
+            '<div class="project-title">Roman Empire cities and roads</div>'
+            '<div id="legendWrap" style="position:fixed;bottom:24px;right:24px;'
+            'z-index:9999;width:230px;display:flex;flex-direction:column;gap:6px">'
+            '<button id="legendToggle" title="Roll legend up/down">&#9662; Legend</button>'
             '<div class="leaflet-down leaflet-right" id="cityLegend">'
             '<b>City color schemes</b> (radio: pick one)<br><br>'
             '<b>1. Empire ranking</b><br>' + swatches(
@@ -849,8 +856,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             '<span style="display:inline-block;width:10px;height:10px;margin:0 4px 0 0;'
             f'background:{POP_UNKNOWN_COLOR};border:1px solid #555;vertical-align:middle"></span>'
             'unknown<br><br>'
-            '<b>3. Foundation nation</b><br>' + swatches(nation_cols) + '</div>'
-            '<button id="legendToggle" title="Roll legend up/down">&#9662; Legend</button>'
+            '<b>3. Foundation nation</b><br>' + swatches(nation_cols) + '</div></div>'
             '<script>window.addEventListener("load",function(){setTimeout(function(){'
             'var b=document.getElementById("legendToggle"),'
             'g=document.getElementById("cityLegend");'
