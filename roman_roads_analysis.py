@@ -956,7 +956,13 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         "box-sizing:border-box;text-align:center}"
         ".leaflet-down.leaflet-right{background:rgba(0,0,0,.5);color:#e6edf3;"
         "padding:10px 14px;border:1px solid #555;border-radius:8px;"
-        "font:11px/1.5 system-ui;box-sizing:border-box;max-height:70vh;overflow-y:auto}"
+        "font:11px/1.5 system-ui;box-sizing:border-box;width:230px;"
+        "max-height:70vh;overflow-y:auto}"
+        ".lg-h{font-weight:600;cursor:pointer;color:#8ab4f8;padding:2px 0}"
+        ".lg-h::before{content:\"\\25B8 \";display:inline-block;transition:transform .15s}"
+        ".lg-sec.open .lg-h::before{transform:rotate(90deg)}"
+        ".lg-b{display:none;padding-left:12px;margin:2px 0 6px}"
+        ".lg-sec.open .lg-b{display:block}"
         "#legendToggle{background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
         "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui;"
         "width:100%;box-sizing:border-box}"
@@ -1108,56 +1114,85 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 ).add_to(fg_jun)
             fg_jun.add_to(m)
 
-        # combined legend panel for the three schemes
+        # legend panel: rollable sections, aligned with the upper control
         def swatches(colors):
             return "".join(
                 f'<span style="display:inline-block;width:10px;height:10px;margin:0 4px 0 0;'
                 f'background:{c};border:1px solid #555;vertical-align:middle"></span>{lab}<br>'
                 for lab, c in colors.items())
+
+        def section(title, body_html, open_=False):
+            return (f'<div class="lg-sec{" open" if open_ else ""}">'
+                    f'<div class="lg-h">{title}</div>'
+                    f'<div class="lg-b">{body_html}</div></div>')
+
         legend = folium.Element(
             '<div class="project-title">Roman Empire cities and roads</div>'
             '<div id="legendWrap" style="position:fixed;bottom:24px;right:24px;'
             'z-index:9999;width:230px;display:flex;flex-direction:column;gap:6px">'
             '<button id="legendToggle" title="Roll legend up/down">&#9662; Legend</button>'
             '<div class="leaflet-down leaflet-right" id="cityLegend">'
-            '<b>City color schemes</b> (radio: pick one)<br><br>'
-            '<b>1. Empire ranking</b><br>' + swatches(
-                {f"rank {r}": c for r, c in RANK_COLORS.items()}) + '<br>'
-            '<b>2. Population</b><br>' + swatches(POP_CLASS_COLORS) +
-            '<span style="display:inline-block;width:10px;height:10px;margin:0 4px 0 0;'
-            f'background:{POP_UNKNOWN_COLOR};border:1px solid #555;vertical-align:middle"></span>'
-            'unknown<br><br>'
-            '<b>3. Foundation nation</b><br>' + swatches(nation_cols) +
-            '<br><b>4/5. UNA centrality</b> (both layers)<br>' + swatches({
+            + section("1. Empire ranking",
+                      swatches({f"rank {r}": c for r, c in RANK_COLORS.items()}),
+                      open_=True)
+            + section("2. Population", swatches(POP_CLASS_COLORS) +
+                      '<span style="display:inline-block;width:10px;height:10px;'
+                      f'background:{POP_UNKNOWN_COLOR};border:1px solid #555;'
+                      'margin:0 4px 0 0;vertical-align:middle"></span>unknown')
+            + section("3. Foundation nation", swatches(nation_cols))
+            + section("4/5. UNA centrality (both layers)", swatches({
                 "off network": POP_UNKNOWN_COLOR, "zero": RANK_COLORS[5],
                 "lowest quartile": RANK_COLORS[4], "lower-mid": RANK_COLORS[3],
-                "upper-mid": RANK_COLORS[2], "top quartile": RANK_COLORS[1]}) +
-            '</div></div>'
+                "upper-mid": RANK_COLORS[2], "top quartile": RANK_COLORS[1]}))
+            + '</div></div>'
             '<script>window.addEventListener("load",function(){setTimeout(function(){'
+            # roll whole panel up/down
             'var b=document.getElementById("legendToggle"),'
             'g=document.getElementById("cityLegend");'
             'if(b&&g){b.addEventListener("click",function(){'
             'var h=g.style.display==="none";g.style.display=h?"block":"none";'
             'b.innerHTML=h?"\\u25BE Legend":"\\u25B4 Legend";});}'
+            # rollable legend sections
+            'document.querySelectorAll("#cityLegend .lg-h").forEach(function(h){'
+            'h.addEventListener("click",function(){'
+            'h.parentNode.classList.toggle("open");});});'
+            # move the attribution out of the bottom-right corner (no overlap)
+            'var att=document.querySelector(".leaflet-control-attribution");'
+            'var bl=document.querySelector(".leaflet-bottom.leaflet-left");'
+            'if(att&&bl){bl.appendChild(att);}'
             # two radio groups (city schemes vs UNA) with section headers;
             # picking in one group clears the other so one coloring shows at a time
             'var groups={cityScheme:["Empire ranking","Population (c. AD 100-165)",'
             '"Foundation nation"],cityUNA:["UNA betweenness","UNA reach"]};'
-            'var all=[];'
+            'var all=[],net=[];'
             'document.querySelectorAll(".leaflet-control-layers-overlays label")'
             '.forEach(function(l){var t=l.textContent||"";'
             'var i=l.querySelector("input");if(!i){return;}'
+            'if(t.indexOf("UNA net")>=0){net.push(i);return;}'
             'for(var g in groups){'
             'if(groups[g].some(function(w){return t.indexOf(w)>=0;})){'
             'i.type="radio";i.name=g;all.push({i:i,g:g,lab:l});break;}}});'
+            'function mp(){var m=null;'
+            'all.concat(net.map(function(x){return {i:x};})).forEach(function(p){'
+            'if(p.i.layer&&p.i.layer._map){m=p.i.layer._map;}});return m;}'
             'all.forEach(function(o){o.i.addEventListener("change",function(){'
             'all.forEach(function(p){if(p.g!==o.g){p.i.checked=false;}});'
-            'var mp=null;'
-            'all.forEach(function(p){if(p.i.layer&&p.i.layer._map){mp=p.i.layer._map;}});'
-            'if(!mp){return;}'
+            'var m=mp();if(!m){return;}'
             'all.forEach(function(p){var L=p.i.layer;if(!L){return;}'
-            'if(p.i.checked&&!L._map){mp.addLayer(L);}'
-            'if(!p.i.checked&&L._map){mp.removeLayer(L);}});});});'
+            'if(p.i.checked&&!L._map){m.addLayer(L);}'
+            'if(!p.i.checked&&L._map){m.removeLayer(L);}});});});'
+            'var saved=null;'
+            'net.forEach(function(i){i.addEventListener("change",function(){'
+            'var on=net.some(function(x){return x.checked;});'
+            'var m=mp();'
+            'all.forEach(function(o){'
+            'if(on){o.i.disabled=true;o.lab.style.opacity=0.4;'
+            'if(o.i.checked){saved=o;o.i.checked=false;}'
+            'if(m&&o.i.layer&&o.i.layer._map){m.removeLayer(o.i.layer);}}'
+            'else{o.i.disabled=false;o.lab.style.opacity=1;}});'
+            'if(!on&&saved&&m){saved.i.checked=true;'
+            'if(saved.i.layer&&!saved.i.layer._map){m.addLayer(saved.i.layer);}}'
+            '});});'
             'var cont=document.querySelector(".leaflet-control-layers-overlays");'
             'function hdr(txt){var d=document.createElement("div");d.textContent=txt;'
             'd.style.cssText="font-weight:600;margin:6px 0 2px;color:#8ab4f8;'
