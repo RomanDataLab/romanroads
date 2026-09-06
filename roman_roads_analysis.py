@@ -998,17 +998,15 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             founder = _city_founder(c, founders or {})
             founded = f"<br>founded by {founder}" if founder else ""
             pop = c["population"]
-            pop_line = ""
             if pop == pop and pop > 0:
                 yr = c["estimate_year"] if c["estimate_year"] == c["estimate_year"] else ""
-                pop_line = f"<br>Population: ~{int(pop):,} ({yr})" if yr else \
-                           f"<br>Population: ~{int(pop):,}"
-            una_line = ""
-            if "una_btw" in c.index and c["una_btw"] == c["una_btw"]:
-                una_line = (f"<br>UNA betweenness: {c['una_btw'] * 100:.1f}% of weighted paths"
-                            f"<br>UNA reach (100 km): ~{int(c['una_reach']):,} people")
+                pop_line = f"<br>Population: ~{pop / 1000:,.0f}k inhabitants"
+                if yr:
+                    pop_line += f" ({yr})"
+            else:
+                pop_line = "<br>Population: 0k (no estimate)"
             return (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
-                    f"Established: {fmt_year(c['Start Date'])}{founded}{pop_line}{una_line}<br>"
+                    f"Established: {fmt_year(c['Start Date'])}{founded}{pop_line}<br>"
                     f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}")
 
         def radius_for(c):
