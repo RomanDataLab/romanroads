@@ -38,6 +38,18 @@ pip install geopandas folium networkx h3 matplotlib numpy pandas shapely osmnx
 python roman_roads_analysis.py
 ```
 
+The pipeline writes the interactive map to `index.html` (the project start page) and
+`output/roman_roads_interactive.html`, the static maps to `output/*.png`, the methodology
+& findings page to `about.html` content, and CSVs to `data/` and `output/`.
+
+## Site structure
+
+| Page | Content |
+|---|---|
+| `/` (`index.html`) | The interactive map: 3 city color schemes + UNA layers, legend with "About & methodology" button |
+| `/about.html` | Methodology, findings, top-10 tables, data sources |
+| `/output/...` | Static maps, findings.md, per-city CSVs, GEXF |
+
 ## Data & credit
 
 - Roman Road Network (version 2008), Digital Atlas of Roman and Medieval Civilizations — CC BY-NC 3.0. [Harvard Dataverse](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/TI0KAU)
