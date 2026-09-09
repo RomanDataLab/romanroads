@@ -966,6 +966,9 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         "#legendToggle{background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
         "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui;"
         "width:100%;box-sizing:border-box}"
+        ".aboutBtn{display:block;background:rgba(0,0,0,.5);color:#8ab4f8;"
+        "border:1px solid #555;border-radius:6px;padding:4px 10px;font:12px system-ui;"
+        "text-align:center;text-decoration:none;width:100%;box-sizing:border-box}"
         "</style>"))
     folium.TileLayer("openstreetmap", name="OSM", show=False).add_to(m)
 
@@ -1128,6 +1131,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             '<div class="project-title">Roman Empire cities and roads</div>'
             '<div id="legendWrap" style="position:fixed;bottom:24px;right:24px;'
             'z-index:9999;width:230px;display:flex;flex-direction:column;gap:6px">'
+            '<a class="aboutBtn" href="about.html">About &amp; methodology</a>'
             '<button id="legendToggle" title="Roll legend up/down">&#9662; Legend</button>'
             '<div class="leaflet-down leaflet-right" id="cityLegend">'
             + section("1. Empire ranking",
@@ -1207,7 +1211,8 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
     folium.LayerControl(collapsed=False).add_to(m)
     m.fit_bounds([[hexes.lat.min() - 1, hexes.lng.min() - 1], [hexes.lat.max() + 1, hexes.lng.max() + 1]])
     m.save(OUT / "roman_roads_interactive.html")
-    print("saved roman_roads_interactive.html")
+    m.save(ROOT / "index.html")  # the map IS the project start page
+    print("saved roman_roads_interactive.html + index.html")
 
 
 def write_findings(hexes: pd.DataFrame, G: nx.Graph, cities: gpd.GeoDataFrame = None) -> None:

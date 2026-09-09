@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- GTM --><script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({"gtm.start":new Date().getTime(),event:"gtm.js"});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!="dataLayer"?"&l="+l:"";j.async=true;j.src="https://www.googletagmanager.com/gtm.js?id="+i+dl;f.parentNode.insertBefore(j,f);})(window,document,"script","dataLayer","GTM-538VHG6H");</script><!-- GA4 [RDT-RRDS-54] --><script async src="https://www.googletagmanager.com/gtag/js?id=G-2E348VSQ5G"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag("js",new Date());gtag("config","G-2E348VSQ5G",{custom_map:{"dimension1":"project_name","dimension2":"page_module","dimension3":"user_type","dimension4":"stream_id"},project_name:"romanroads",stream_id:"RDT-RRDS-54",page_module:document.title.split("—")[0].trim()||"unknown",user_type:(location.search.includes("mode=client")?"client":"ops")});</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About — Roman Empire cities and roads</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#d4a373; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:Georgia,'Times New Roman',serif; line-height:1.65; }
+  .wrap { max-width:860px; margin:0 auto; padding:40px 24px 80px; }
+  a { color:#4d9fff; text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .back { display:inline-block; margin-bottom:28px; border:1px solid var(--accent); color:var(--accent);
+          padding:8px 16px; border-radius:8px; font-family:system-ui,sans-serif; font-size:.9rem; }
+  h1 { font-size:2.2rem; font-weight:normal; }
+  h1 em { color:var(--accent); }
+  h2 { font-weight:normal; font-size:1.4rem; margin:40px 0 12px; color:var(--accent); }
+  .sub { color:var(--muted); font-family:system-ui,sans-serif; font-size:.9rem; margin-top:6px; }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-family:system-ui,sans-serif; font-size:.85rem; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin:14px 0; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:16px 0; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 18px; }
+  .stat b { display:block; font-size:1.6rem; }
+  .stat span { color:var(--muted); font-family:system-ui,sans-serif; font-size:.8rem; }
+  footer { margin-top:60px; color:var(--muted); font-family:system-ui,sans-serif; font-size:.78rem; border-top:1px solid var(--line); padding-top:18px; }
+  footer a { color:var(--muted); }
+</style>
+</head>
+<body>
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-538VHG6H" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<div class="wrap">
+  <a class="back" href="index.html">&larr; Back to the map</a>
+
+  <h1>Do all the roads lead to <em>Rome</em>?</h1>
+  <p class="sub">An analysis of the Roman road network, its cities, populations and traffic — built on
+  the DARMC 2008 road network and Hanson 2016 city catalogue, after Janosov 2023.</p>
+
+  <div class="stats">
+    <div class="stat"><b>5,086 / 7,048</b><span>graph nodes / edges (100 components)</span></div>
+    <div class="stat"><b>1,388</b><span>known Roman cities (Hanson 2016, 100 BC–AD 300)</span></div>
+    <div class="stat"><b>80%</b><span>of cities within 5 km of a road (1,105)</span></div>
+    <div class="stat"><b>887</b><span>cities with population estimates (c. AD 100–165)</span></div>
+  </div>
+
+  <h2>Method</h2>
+  <div class="card">
+    <p><b>1. Network.</b> The DARMC Roman Road Network (2008) shapefile (7,154 segments, Lambert
+    Conformal Conic) is reprojected to EPSG:4326; an undirected graph joins segment endpoints
+    (5,086 nodes / 7,048 edges).</p>
+    <p><b>2. Centrality.</b> Degree and unnormalized betweenness centrality per node, aggregated into
+    H3 hexagons (resolution 3) covering the Empire's extent (20 km buffer). Rome's hexagon ranks
+    #1 on both measures.</p>
+    <p><b>3. Cities.</b> Hanson 2016 catalogue (1,388 cities): road access via nearest-road distance in
+    the metric CRS; Wikipedia links resolved per ancient city (disambiguation-aware); founders from
+    Wikidata P112 with a pre-Roman regional-power fallback and curated overrides; Greek tribes
+    distinguished (Dorian/Ionian/Achaean/Aeolian/Macedonian…).</p>
+    <p><b>4. Population.</b> 210 direct estimates from Hanson &amp; Ortman 2017 (JRSI); a density
+    relation calibrated on their data (pop = 44.5 × area^1.33, r² = 0.985) converts the 885 measured
+    built-up areas; Chandler/Modelski (Reba et al. 2016) fills remaining majors at AD 100–200. All
+    estimates share one time window.</p>
+    <p><b>5. Urban Network Analysis (City Form Lab methodology).</b> The roads are planarized (split
+    at every crossing) and contracted to junctions; cities are population-weighted nodes. <b>Weighted
+    betweenness</b> = share of population-weighted shortest paths through a city; <b>reach (100 km)</b>
+    = city population within 100 network-km. Road chunks are colored by the load they carry.</p>
+  </div>
+
+  <h2>Key findings</h2>
+  <div class="card">
+    <ul style="list-style:none">
+      <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
+        Rome's hexagon tops both degree and betweenness — the network data agrees with the proverb.</li>
+      <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
+        Damascus, Byzantium, Milan, Lepcis Magna and Lyon sit directly on a digitized road (&lt;0.1 km);
+        Carthage, Jerusalem, Alexandria, Athens and London connect within 2 km.</li>
+      <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
+        The unconnected majors cluster in Crete and the Peloponnesian interior — a digitization gap in
+        the DARMC layer, not an ancient reality.</li>
+      <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
+        Weighted traffic funnels through the Alpine gate (Aquileia/Concordia) and the
+        Philippopolis–Byzantium–Nicaea corridor — the empire's one-bridge-per-region bottlenecks.</li>
+    </ul>
+  </div>
+
+  <h2>Largest cities by estimated population (c. AD 100–165)</h2>
+  <table>
+    <tr><th>#</th><th>City</th><th>Modern</th><th>Province</th><th class="num">Population</th></tr>
+    <tr><td>1</td><td>Roma</td><td>Rome</td><td>Italia</td><td class="num">~923,000</td></tr>
+    <tr><td>2</td><td>Alexandria (Aegyptus)</td><td>Alexandria</td><td>Aegyptus</td><td class="num">~411,000</td></tr>
+    <tr><td>3</td><td>Lepcis Magna</td><td>Lebda</td><td>Africa Proconsularis</td><td class="num">~157,000</td></tr>
+    <tr><td>4</td><td>Rhodus</td><td>Rhodes</td><td>Asia</td><td class="num">~133,000</td></tr>
+    <tr><td>5</td><td>Antiochia (Syria)</td><td>Antakya</td><td>Syria</td><td class="num">~128,000</td></tr>
+    <tr><td>6</td><td>Carthago</td><td>Tunis</td><td>Africa Proconsularis</td><td class="num">~102,000</td></tr>
+    <tr><td>7</td><td>Mazaca</td><td>Kayseri</td><td>Cappadocia et Galatia</td><td class="num">~100,000</td></tr>
+    <tr><td>8</td><td>Sparta</td><td>Sparti</td><td>Achaea</td><td class="num">~89,000</td></tr>
+    <tr><td>9</td><td>Syracusae</td><td>Syracuse</td><td>Sicilia</td><td class="num">~84,000</td></tr>
+    <tr><td>10</td><td>Arsinoe</td><td>Arsinoe</td><td>Aegyptus</td><td class="num">~83,000</td></tr>
+  </table>
+
+  <h2>Top cities by UNA weighted betweenness</h2>
+  <table>
+    <tr><th>#</th><th>City</th><th class="num">Share of weighted paths</th></tr>
+    <tr><td>1</td><td>Aquileia</td><td class="num">41.7%</td></tr>
+    <tr><td>2</td><td>Concordia</td><td class="num">41.5%</td></tr>
+    <tr><td>3</td><td>Philippopolis (Thracia)</td><td class="num">39.5%</td></tr>
+    <tr><td>4</td><td>Hadrianopolis (Thracia)</td><td class="num">39.5%</td></tr>
+    <tr><td>5</td><td>Heraclea (Thracia)</td><td class="num">38.6%</td></tr>
+    <tr><td>6</td><td>Chalcedon</td><td class="num">37.9%</td></tr>
+    <tr><td>7</td><td>Byzantium</td><td class="num">37.9%</td></tr>
+    <tr><td>8</td><td>Nicomedia</td><td class="num">36.9%</td></tr>
+    <tr><td>9</td><td>Nicaea</td><td class="num">36.9%</td></tr>
+    <tr><td>10</td><td>Cibalae</td><td class="num">35.2%</td></tr>
+  </table>
+
+  <footer>
+    Data: <a href="https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/TI0KAU">DARMC Roman Road Network (2008)</a>, CC BY-NC 3.0 ·
+    <a href="https://oxrep.web.ox.ac.uk/cities-database">Hanson 2016 Cities Database</a> (OxREP), doi:10.5287/bodleian:eqapevAn8 ·
+    Hanson &amp; Ortman 2017 (JRSI); Reba, Reitsma &amp; Seto 2016 (Scientific Data) ·
+    UNA methodology: <a href="https://cityform.mit.edu/projects/urban-network-analysis.html">City Form Lab, MIT</a> ·
+    After <a href="https://towardsdatascience.com/do-all-the-roads-lead-to-rome-5b6756ce7d52/">Janosov 2023</a> ·
+    <a href="https://github.com/RomanDataLab/romanroads">Source</a>
+  </footer>
+</div>
+</body>
+</html>
