@@ -1047,30 +1047,37 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         "<style>"
         ".city-link{color:#4d9fff;font-weight:600;text-decoration:none}"
         ".city-link:hover{color:#1a56db;text-decoration:underline}"
-        ".leaflet-top.leaflet-right .leaflet-control-layers,"
-        ".leaflet-top.leaflet-right .leaflet-control-layers-expanded{"
-        "background:rgba(0,0,0,.5);color:#e6edf3;width:230px;box-sizing:border-box}"
         ".leaflet-control-layers label{color:#e6edf3;white-space:normal}"
-        ".leaflet-top.leaflet-right{margin-top:34px}"
-        ".project-title{position:fixed;top:12px;right:12px;z-index:10000;"
+        "#panelMaps .leaflet-control-layers,"
+        "#panelMaps .leaflet-control-layers-expanded{"
+        "background:none;color:#e6edf3;width:100%;box-sizing:border-box;"
+        "margin:0;border:none;border-radius:0;box-shadow:none}"
+        "#panelMaps .leaflet-control-layers-expanded{padding:10px 12px}"
+        ".project-title{position:fixed;top:12px;right:12px;z-index:10001;"
         "background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
         "border-radius:6px;padding:4px 10px;font:12px system-ui;width:230px;"
-        "box-sizing:border-box;text-align:center}"
-        ".leaflet-down.leaflet-right{background:rgba(0,0,0,.5);color:#e6edf3;"
-        "padding:10px 14px;border:1px solid #555;border-radius:8px;"
-        "font:11px/1.5 system-ui;box-sizing:border-box;width:230px;"
-        "max-height:70vh;overflow-y:auto}"
+        "box-sizing:border-box;text-align:center;text-decoration:none;display:block}"
+        ".project-title .t-hover{display:none;color:#8ab4f8;font-weight:600}"
+        ".project-title:hover .t-name{display:none}"
+        ".project-title:hover .t-hover{display:inline}"
+        ".project-title:hover{border-color:#8ab4f8}"
+        "#panelWrap{position:fixed;top:46px;right:12px;z-index:10000;width:230px;"
+        "box-sizing:border-box;font:11px/1.5 system-ui;color:#e6edf3}"
+        "#panelTabs{display:flex;gap:4px;margin-bottom:-1px;position:relative;z-index:2}"
+        ".ptab{flex:1;background:rgba(0,0,0,.5);color:#8b949e;border:1px solid #555;"
+        "border-radius:6px 6px 0 0;padding:4px 10px;cursor:pointer;font:12px system-ui}"
+        ".ptab.active{color:#e6edf3;background:rgba(20,25,32,.95);border-color:#8ab4f8;"
+        "border-bottom:1px solid rgba(20,25,32,.95)}"
+        "#panelBody{background:rgba(20,25,32,.95);border:1px solid #555;"
+        "border-radius:0 0 8px 8px;max-height:calc(100vh - 110px);overflow-y:auto}"
+        "#panelBody.rolled{display:none}"
+        "#panelBody .ptab-empty{padding:12px;color:#8b949e}"
+        "#cityLegend{padding:10px 14px;font:11px/1.5 system-ui;color:#e6edf3}"
         ".lg-h{font-weight:600;cursor:pointer;color:#8ab4f8;padding:2px 0}"
         ".lg-h::before{content:\"\\25B8 \";display:inline-block;transition:transform .15s}"
         ".lg-sec.open .lg-h::before{transform:rotate(90deg)}"
         ".lg-b{display:none;padding-left:12px;margin:2px 0 6px}"
         ".lg-sec.open .lg-b{display:block}"
-        "#legendToggle{background:rgba(0,0,0,.5);color:#e6edf3;border:1px solid #555;"
-        "border-radius:6px;padding:4px 10px;cursor:pointer;font:12px system-ui;"
-        "width:100%;box-sizing:border-box}"
-        ".aboutBtn{display:block;background:rgba(0,0,0,.5);color:#8ab4f8;"
-        "border:1px solid #555;border-radius:6px;padding:4px 10px;font:12px system-ui;"
-        "text-align:center;text-decoration:none;width:100%;box-sizing:border-box}"
         "</style>"))
     folium.TileLayer("openstreetmap", name="OSM", show=False).add_to(m)
 
@@ -1267,12 +1274,17 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                     f'<div class="lg-b">{body_html}</div></div>')
 
         legend = folium.Element(
-            '<div class="project-title">Roman Empire cities and roads</div>'
-            '<div id="legendWrap" style="position:fixed;bottom:24px;right:24px;'
-            'z-index:9999;width:230px;display:flex;flex-direction:column;gap:6px">'
-            '<a class="aboutBtn" href="about.html">About &amp; methodology</a>'
-            '<button id="legendToggle" title="Roll legend up/down">&#9662; Legend</button>'
-            '<div class="leaflet-down leaflet-right" id="cityLegend">'
+            '<a class="project-title" href="about.html" title="methodology">'
+            '<span class="t-name">Roman Empire cities and roads</span>'
+            '<span class="t-hover">methodology &#8599;</span></a>'
+            '<div id="panelWrap">'
+            '<div id="panelTabs">'
+            '<button class="ptab active" id="tabMaps" title="Layers (click again to roll up)">maps</button>'
+            '<button class="ptab" id="tabLegend" title="Legend (click again to roll up)">legend</button>'
+            '</div>'
+            '<div id="panelBody">'
+            '<div id="panelMaps"></div>'
+            '<div id="cityLegend" style="display:none">'
             + section("1. Empire ranking",
                       swatches({f"rank {r}": c for r, c in RANK_COLORS.items()}),
                       open_=True)
@@ -1292,14 +1304,31 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                       ' provincial capital<br>'
                       '<span style="color:#8b949e">the UNA betweenness scheme uses the'
                       ' imperial+provincial variant</span>')
-            + '</div></div>'
+            + '</div></div></div>'
             '<script>window.addEventListener("load",function(){setTimeout(function(){'
-            # roll whole panel up/down
-            'var b=document.getElementById("legendToggle"),'
-            'g=document.getElementById("cityLegend");'
-            'if(b&&g){b.addEventListener("click",function(){'
-            'var h=g.style.display==="none";g.style.display=h?"block":"none";'
-            'b.innerHTML=h?"\\u25BE Legend":"\\u25B4 Legend";});}'
+            # one card, two tabs: the Leaflet layers control moves into the
+            # panel's maps slot, the legend shows in the same placeholder;
+            # clicking the active tab rolls the body up/down
+            'var pm=document.getElementById("panelMaps"),'
+            'lg=document.getElementById("cityLegend"),'
+            'pb=document.getElementById("panelBody"),'
+            'tm=document.getElementById("tabMaps"),'
+            'tl=document.getElementById("tabLegend"),cur="maps";'
+            'var ctrl=document.querySelector('
+            '".leaflet-top.leaflet-right .leaflet-control-layers");'
+            'if(ctrl&&pm){pm.appendChild(ctrl);}'
+            'function show(w){cur=w;'
+            'pm.style.display=w==="maps"?"block":"none";'
+            'lg.style.display=w==="maps"?"none":"block";'
+            'tm.classList.toggle("active",w==="maps");'
+            'tl.classList.toggle("active",w==="legend");}'
+            'if(tm&&tl){'
+            'tm.addEventListener("click",function(){'
+            'if(cur==="maps"){pb.classList.toggle("rolled");return;}'
+            'pb.classList.remove("rolled");show("maps");});'
+            'tl.addEventListener("click",function(){'
+            'if(cur==="legend"){pb.classList.toggle("rolled");return;}'
+            'pb.classList.remove("rolled");show("legend");});}'
             # rollable legend sections
             'document.querySelectorAll("#cityLegend .lg-h").forEach(function(h){'
             'h.addEventListener("click",function(){'
