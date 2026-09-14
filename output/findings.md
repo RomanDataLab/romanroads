@@ -68,29 +68,29 @@ Two variants are computed: capitals (imperial; then imperial + provincial) carry
 | # | city | share of weighted paths | reach (100 km) |
 |---|---|---|---|
 | 1 | Aquileia | 26.7% | ~47,153 |
-| 2 | Concordia | 26.6% | ~91,968 |
+| 2 | Concordia | 26.7% | ~91,968 |
 | 3 | Philippopolis (Thracia) | 24.2% | ~4,096 |
 | 4 | Hadrianopolis (Thracia) | 24.2% | ~0 |
 | 5 | Heraclea (Thracia) | 23.7% | ~0 |
 | 6 | Chalcedon | 22.9% | ~60,761 |
 | 7 | Byzantium | 22.9% | ~60,761 |
 | 8 | Cibalae | 22.2% | ~22,247 |
-| 9 | Bassiana (Pannonia Inferior) | 21.9% | ~18,331 |
-| 10 | Sirmium | 21.9% | ~14,877 |
+| 9 | Bassiana (Pannonia Inferior) | 22.0% | ~18,331 |
+| 10 | Sirmium | 22.0% | ~14,877 |
 
 ### Top cities by weighted betweenness (imperial + provincial capitals ×2)
 
 | # | city | share of weighted paths | reach (100 km) |
 |---|---|---|---|
 | 1 | Aquileia | 24.7% | ~47,153 |
-| 2 | Concordia | 24.6% | ~91,968 |
+| 2 | Concordia | 24.7% | ~91,968 |
 | 3 | Philippopolis (Thracia) | 22.8% | ~4,096 |
 | 4 | Hadrianopolis (Thracia) | 22.7% | ~0 |
 | 5 | Heraclea (Thracia) | 22.2% | ~0 |
 | 6 | Chalcedon | 21.6% | ~60,761 |
 | 7 | Byzantium | 21.6% | ~60,761 |
 | 8 | Nicaea | 20.8% | ~60,761 |
-| 9 | Cibalae | 20.7% | ~22,247 |
+| 9 | Cibalae | 20.8% | ~22,247 |
 | 10 | Nicomedia | 20.6% | ~59,495 |
 
 ### Top cities by reach (100 km)
@@ -122,6 +122,7 @@ Two variants are computed: capitals (imperial; then imperial + provincial) carry
 | Sirmium | residence | AD 293–AD 318 |
 | Antiochia (Syria) | residence | AD 337–AD 361 |
 | Byzantium | capital | AD 330–AD 476 |
+| Serdica | residence | AD 316–AD 324 |
 
 Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 2008 with edge weights in km (Lambert Conformal Conic); weights = population estimates (see section above) with capitals x2 (curated lists: data/capitals_imperial.csv, data/capitals_provincial.csv).
 

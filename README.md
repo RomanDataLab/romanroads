@@ -10,7 +10,7 @@ Milan Janosov's 2023 analysis ([Towards Data Science](https://towardsdatascience
 3. Computes **degree** and **km-weighted betweenness centrality** per node.
 4. Aggregates node scores into **H3 hexagons (resolution 3)** covering the Empire's extent (20 km buffer).
 5. Loads **1,388 Roman cities** (Hanson 2016) and measures each city's distance to the nearest road.
-6. **UNA centrality with capitals ×2** — two variants (10 imperial capitals; 46 imperial + provincial, curated in `data/capitals_*.csv`) where capital node weight = population × 2. Weighted betweenness uses exact Brandes accumulation (tied shortest paths split fractionally). Each variant gets its own roads/junctions map layer.
+6. **UNA centrality with capitals ×2** — two variants (11 imperial capitals/residences; 47 imperial + provincial, curated in `data/capitals_*.csv`) where capital node weight = population × 2. Weighted betweenness uses exact Brandes accumulation (tied shortest paths split fractionally). Each variant gets its own roads/junctions map layer.
 7. Emits static maps (PNG), an interactive folium map (HTML), a GEXF graph for Gephi, CSVs, and findings.
 
 ## Findings

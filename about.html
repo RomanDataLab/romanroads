@@ -46,7 +46,7 @@
     <div class="stat"><b>1,388</b><span>known Roman cities (Hanson 2016, 100 BC–AD 300)</span></div>
     <div class="stat"><b>80%</b><span>of cities within 5 km of a road (1,105)</span></div>
     <div class="stat"><b>887</b><span>cities with population estimates (c. AD 100–165)</span></div>
-    <div class="stat"><b>10 / 46</b><span>capitals modeled ×2: imperial / imperial+provincial</span></div>
+    <div class="stat"><b>11 / 47</b><span>capitals modeled ×2: imperial / imperial+provincial</span></div>
   </div>
 
   <h2>Method</h2>
@@ -61,6 +61,11 @@
     the metric CRS; Wikipedia links resolved per ancient city (disambiguation-aware); founders from
     Wikidata P112 with a pre-Roman regional-power fallback and curated overrides; Greek tribes
     distinguished (Dorian/Ionian/Achaean/Aeolian/Macedonian…).</p>
+    <p><b>3a. Empire ranking.</b> Each city carries a <b>Barrington Atlas Rank</b>: 1 = largest
+    (Rome-scale metropolis, 14 cities), 2 = major (162), 3 = significant (816), 4–5 = minor
+    (unranked entries count as 5). The map's "Empire ranking" scheme colors every city by this
+    scale — a size grading from the Barrington Atlas of the Greek and Roman World, independent of
+    the population estimates in step 4.</p>
     <p><b>4. Population.</b> 210 direct estimates from Hanson &amp; Ortman 2017 (JRSI); a density
     relation calibrated on their data (pop = 44.5 × area^1.33, r² = 0.985) converts the 885 measured
     built-up areas; Chandler/Modelski (Reba et al. 2016) fills remaining majors at AD 100–200. All
@@ -70,12 +75,12 @@
     betweenness</b> = share of population-weighted shortest paths through a city, with every tied
     shortest path counted fractionally (exact Brandes accumulation); <b>reach (100 km)</b>
     = city population within 100 network-km. Road chunks are colored by the load they carry.</p>
-    <p><b>6. Capitals ×2.</b> Two curated sets — 10 imperial capitals/residences (Rome,
-    Constantinople, Nicomedia, Milan, Ravenna, Trier, Sirmium, Antioch, Thessalonica, York) and 46
-    with provincial capitals added (Lugdunum, Ephesus, Corduba, Londinium…) — each run as its own
-    variant with capital node weight = population × 2, shown as separate map layers. Populations are
-    AD 100–165 while most imperial capitals are 284–476: a deliberate anachronism modelling
-    administrative pull across the imperial era.</p>
+    <p><b>6. Capitals ×2.</b> Two curated sets — 11 imperial capitals/residences (Rome,
+    Constantinople, Nicomedia, Milan, Ravenna, Trier, Sirmium, Antioch, Thessalonica, York,
+    Serdica) and 47 with provincial capitals added (Lugdunum, Ephesus, Corduba, Londinium…) —
+    each run as its own variant with capital node weight = population × 2, shown as separate map
+    layers. Populations are AD 100–165 while most imperial capitals are 284–476: a deliberate
+    anachronism modelling administrative pull across the imperial era.</p>
   </div>
 
   <h2>Key findings</h2>
