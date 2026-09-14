@@ -46,6 +46,7 @@
     <div class="stat"><b>1,388</b><span>known Roman cities (Hanson 2016, 100 BC–AD 300)</span></div>
     <div class="stat"><b>80%</b><span>of cities within 5 km of a road (1,105)</span></div>
     <div class="stat"><b>887</b><span>cities with population estimates (c. AD 100–165)</span></div>
+    <div class="stat"><b>10 / 46</b><span>capitals modeled ×2: imperial / imperial+provincial</span></div>
   </div>
 
   <h2>Method</h2>
@@ -53,9 +54,9 @@
     <p><b>1. Network.</b> The DARMC Roman Road Network (2008) shapefile (7,154 segments, Lambert
     Conformal Conic) is reprojected to EPSG:4326; an undirected graph joins segment endpoints
     (5,086 nodes / 7,048 edges).</p>
-    <p><b>2. Centrality.</b> Degree and unnormalized betweenness centrality per node, aggregated into
-    H3 hexagons (resolution 3) covering the Empire's extent (20 km buffer). Rome's hexagon ranks
-    #1 on both measures.</p>
+    <p><b>2. Centrality.</b> Degree and unnormalized <b>km-weighted</b> betweenness centrality per node
+    (edge lengths as path costs), aggregated into H3 hexagons (resolution 3) covering the Empire's
+    extent (20 km buffer). Rome's hexagon ranks #1 on both measures.</p>
     <p><b>3. Cities.</b> Hanson 2016 catalogue (1,388 cities): road access via nearest-road distance in
     the metric CRS; Wikipedia links resolved per ancient city (disambiguation-aware); founders from
     Wikidata P112 with a pre-Roman regional-power fallback and curated overrides; Greek tribes
@@ -66,15 +67,22 @@
     estimates share one time window.</p>
     <p><b>5. Urban Network Analysis (City Form Lab methodology).</b> The roads are planarized (split
     at every crossing) and contracted to junctions; cities are population-weighted nodes. <b>Weighted
-    betweenness</b> = share of population-weighted shortest paths through a city; <b>reach (100 km)</b>
+    betweenness</b> = share of population-weighted shortest paths through a city, with every tied
+    shortest path counted fractionally (exact Brandes accumulation); <b>reach (100 km)</b>
     = city population within 100 network-km. Road chunks are colored by the load they carry.</p>
+    <p><b>6. Capitals ×2.</b> Two curated sets — 10 imperial capitals/residences (Rome,
+    Constantinople, Nicomedia, Milan, Ravenna, Trier, Sirmium, Antioch, Thessalonica, York) and 46
+    with provincial capitals added (Lugdunum, Ephesus, Corduba, Londinium…) — each run as its own
+    variant with capital node weight = population × 2, shown as separate map layers. Populations are
+    AD 100–165 while most imperial capitals are 284–476: a deliberate anachronism modelling
+    administrative pull across the imperial era.</p>
   </div>
 
   <h2>Key findings</h2>
   <div class="card">
     <ul style="list-style:none">
       <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
-        Rome's hexagon tops both degree and betweenness — the network data agrees with the proverb.</li>
+        Rome's hexagon tops both degree and km-weighted betweenness — the network data agrees with the proverb.</li>
       <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
         Damascus, Byzantium, Milan, Lepcis Magna and Lyon sit directly on a digitized road (&lt;0.1 km);
         Carthage, Jerusalem, Alexandria, Athens and London connect within 2 km.</li>
@@ -82,8 +90,16 @@
         The unconnected majors cluster in Crete and the Peloponnesian interior — a digitization gap in
         the DARMC layer, not an ancient reality.</li>
       <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
-        Weighted traffic funnels through the Alpine gate (Aquileia/Concordia) and the
-        Philippopolis–Byzantium–Nicaea corridor — the empire's one-bridge-per-region bottlenecks.</li>
+        Exact tie-splitting (every tied shortest path counted fractionally) lowers the corridor
+        shares: Aquileia/Concordia lead at 26.7%/26.6%, then the
+        Philippopolis–Hadrianopolis–Byzantium corridor — the empire's one-bridge-per-region bottlenecks.</li>
+      <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
+        Capitals that lie on corridors carry heavy through-traffic (Sirmium 21.9%, Byzantium 22.9%,
+        Ravenna 18.3%, Nicomedia 21.7%), while terminal capitals — Rome, York, Carthage, Ephesus —
+        carry almost none: betweenness measures position on paths, not importance.</li>
+      <li style="padding:6px 0 6px 24px;position:relative"><span style="position:absolute;left:0;color:#a50026;font-style:italic">Via</span>
+        Boosting all 46 capitals pulls western traffic onto the transalpine and Asia Minor routes:
+        Nicaea and Nicomedia enter the top ten (20.8% / 20.6%).</li>
     </ul>
   </div>
 
@@ -102,20 +118,36 @@
     <tr><td>10</td><td>Arsinoe</td><td>Arsinoe</td><td>Aegyptus</td><td class="num">~83,000</td></tr>
   </table>
 
-  <h2>Top cities by UNA weighted betweenness</h2>
+  <h2>Top cities by UNA weighted betweenness — imperial capitals ×2</h2>
   <table>
     <tr><th>#</th><th>City</th><th class="num">Share of weighted paths</th></tr>
-    <tr><td>1</td><td>Aquileia</td><td class="num">41.7%</td></tr>
-    <tr><td>2</td><td>Concordia</td><td class="num">41.5%</td></tr>
-    <tr><td>3</td><td>Philippopolis (Thracia)</td><td class="num">39.5%</td></tr>
-    <tr><td>4</td><td>Hadrianopolis (Thracia)</td><td class="num">39.5%</td></tr>
-    <tr><td>5</td><td>Heraclea (Thracia)</td><td class="num">38.6%</td></tr>
-    <tr><td>6</td><td>Chalcedon</td><td class="num">37.9%</td></tr>
-    <tr><td>7</td><td>Byzantium</td><td class="num">37.9%</td></tr>
-    <tr><td>8</td><td>Nicomedia</td><td class="num">36.9%</td></tr>
-    <tr><td>9</td><td>Nicaea</td><td class="num">36.8%</td></tr>
-    <tr><td>10</td><td>Cibalae</td><td class="num">35.2%</td></tr>
+    <tr><td>1</td><td>Aquileia</td><td class="num">26.7%</td></tr>
+    <tr><td>2</td><td>Concordia</td><td class="num">26.6%</td></tr>
+    <tr><td>3</td><td>Philippopolis (Thracia)</td><td class="num">24.2%</td></tr>
+    <tr><td>4</td><td>Hadrianopolis (Thracia)</td><td class="num">24.2%</td></tr>
+    <tr><td>5</td><td>Heraclea (Thracia)</td><td class="num">23.7%</td></tr>
+    <tr><td>6</td><td>Chalcedon</td><td class="num">22.9%</td></tr>
+    <tr><td>7</td><td>Byzantium ★</td><td class="num">22.9%</td></tr>
+    <tr><td>8</td><td>Cibalae</td><td class="num">22.2%</td></tr>
+    <tr><td>9</td><td>Bassiana (Pannonia Inferior)</td><td class="num">21.9%</td></tr>
+    <tr><td>10</td><td>Sirmium ★</td><td class="num">21.9%</td></tr>
   </table>
+
+  <h2>Top cities by UNA weighted betweenness — imperial + provincial capitals ×2</h2>
+  <table>
+    <tr><th>#</th><th>City</th><th class="num">Share of weighted paths</th></tr>
+    <tr><td>1</td><td>Aquileia</td><td class="num">24.7%</td></tr>
+    <tr><td>2</td><td>Concordia</td><td class="num">24.6%</td></tr>
+    <tr><td>3</td><td>Philippopolis (Thracia)</td><td class="num">22.8%</td></tr>
+    <tr><td>4</td><td>Hadrianopolis (Thracia)</td><td class="num">22.7%</td></tr>
+    <tr><td>5</td><td>Heraclea (Thracia)</td><td class="num">22.2%</td></tr>
+    <tr><td>6</td><td>Chalcedon</td><td class="num">21.6%</td></tr>
+    <tr><td>7</td><td>Byzantium ★◎</td><td class="num">21.6%</td></tr>
+    <tr><td>8</td><td>Nicaea</td><td class="num">20.8%</td></tr>
+    <tr><td>9</td><td>Cibalae</td><td class="num">20.7%</td></tr>
+    <tr><td>10</td><td>Nicomedia ★◎</td><td class="num">20.6%</td></tr>
+  </table>
+  <p class="sub">★ imperial capital/residence · ◎ provincial capital (same ×2 boost as the map layers).</p>
 
   <footer>
     Data: <a href="https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/TI0KAU">DARMC Roman Road Network (2008)</a>, CC BY-NC 3.0 ·

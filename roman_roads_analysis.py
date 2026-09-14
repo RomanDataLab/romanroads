@@ -4,10 +4,13 @@ Do All the Roads Lead to Rome? — network analysis of the Roman road network.
 Pipeline (after Janosov, 2023, milanjanosov.substack.com):
   1. Load DARMC Roman Road Network (2008) shapefile, reproject to EPSG:4326.
   2. Build an undirected graph from linestring endpoints.
-  3. Compute degree and betweenness centrality per node.
+  3. Compute degree and km-weighted betweenness centrality per node.
   4. Aggregate node scores into H3 hexagons (res 3) covering the Empire's extent.
   5. Load Roman cities (Hanson 2016, OxREP) and check road access (nearest road <= 5 km).
-  6. Emit maps (PNG), interactive map (HTML), GEXF for Gephi, CSVs, findings.
+  6. UNA centrality with capitals at population x2 — two variants: imperial
+     capitals only, and imperial + provincial (curated lists in data/capitals_*.csv).
+     Betweenness is exact Brandes accumulation (tied shortest paths split).
+  7. Emit maps (PNG), interactive map (HTML), GEXF for Gephi, CSVs, findings.
 """
 
 import json
@@ -39,6 +42,16 @@ CITIES_DATA = ROOT / "data" / "hanson2016_cities.csv"
 POP_DATA = ROOT / "data" / "city_populations.csv"
 WIKI_CACHE = ROOT / "data" / "city_wiki_links.csv"
 FOUNDERS_CACHE = ROOT / "data" / "city_founders.csv"
+CAPITALS_IMPERIAL = ROOT / "data" / "capitals_imperial.csv"
+CAPITALS_PROVINCIAL = ROOT / "data" / "capitals_provincial.csv"
+
+# Capital cities double their population weight in the UNA path computation.
+# Two variants are run: imperial capitals only, and imperial + provincial.
+CAPITAL_BOOST = 2.0
+UNA_VARIANTS = {  # tag -> (label fragment, boost set source file)
+    "imp": "imperial capitals ×2",
+    "iprov": "imperial+provincial capitals ×2",
+}
 
 # Approximate year each province came under Roman control (negative = BC);
 # a city whose Start Date is earlier was founded before the conquest.
@@ -238,6 +251,50 @@ def load_cities() -> gpd.GeoDataFrame:
     else:
         cities["population"], cities["estimate_year"], cities["source"] = float("nan"), "", ""
     print(f"loaded {len(cities)} Roman cities, {df['Province'].nunique()} provinces")
+    return cities
+
+
+def _capital_years(row) -> str:
+    span = str(row["from_year"]) if row["from_year"] == row["from_year"] else ""
+    if row["to_year"] == row["to_year"]:
+        span += f"–{row['to_year']}" if span else str(row["to_year"])
+    return span
+
+
+def load_capitals() -> dict:
+    """Curated capital sets (Hanson primary keys) for the two UNA weight
+    variants: imperial capitals/residences (10) and imperial + provincial
+    capitals (union of both files, 46 cities)."""
+    imp_df = pd.read_csv(CAPITALS_IMPERIAL)
+    prov_df = pd.read_csv(CAPITALS_PROVINCIAL)
+    sets = {
+        "imp": set(imp_df["primary_key"]),
+        "iprov": set(imp_df["primary_key"]) | set(prov_df["primary_key"]),
+    }
+    print(f"capitals: {len(sets['imp'])} imperial, "
+          f"{len(sets['iprov'])} imperial+provincial")
+    return sets
+
+
+def annotate_capitals(cities: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Merge card labels: 'Imperial capital (AD 330–476)' / 'Provincial
+    capital of Asia' — a city can carry both (Roma, Thessalonica...)."""
+    imp = pd.read_csv(CAPITALS_IMPERIAL)
+    imp["imp_label"] = [
+        "Imperial " + ("capital" if role == "capital" else "residence")
+        + f" ({_capital_years(r)})"
+        for role, (_, r) in zip(imp["role"], imp.iterrows())]
+    prov = pd.read_csv(CAPITALS_PROVINCIAL).drop_duplicates("primary_key")
+    prov["prov_label"] = "Provincial capital of " + prov["province"]
+    cities = cities.merge(
+        imp[["primary_key", "imp_label"]].rename(columns={"primary_key": "Primary Key"}),
+        on="Primary Key", how="left")
+    cities = cities.merge(
+        prov[["primary_key", "prov_label"]].rename(columns={"primary_key": "Primary Key"}),
+        on="Primary Key", how="left")
+    n_imp = int(cities["imp_label"].notna().sum())
+    n_prov = int(cities["prov_label"].notna().sum())
+    print(f"capital labels merged: {n_imp} imperial, {n_prov} provincial")
     return cities
 
 
@@ -630,8 +687,8 @@ def build_graph(roads: gpd.GeoDataFrame, lengths_km=None) -> nx.Graph:
 
 
 def compute_centralities(G: nx.Graph) -> pd.DataFrame:
-    print("computing betweenness centrality ...")
-    bet = nx.betweenness_centrality(G, normalized=False)
+    print("computing betweenness centrality (km-weighted) ...")
+    bet = nx.betweenness_centrality(G, normalized=False, weight="km")
     deg = dict(G.degree())
     df = pd.DataFrame(
         {
@@ -717,15 +774,24 @@ def _contract_chains(G: nx.Graph, protected: set):
     return G, chains
 
 
-def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd.DataFrame:
+def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame,
+                 boost_sets: dict) -> dict:
     """Urban Network Analysis (City Form Lab methodology) on the road network.
 
     The planarized road graph (nodes at every crossing, metric edge weights)
     is contracted to junctions; cities are population-weighted nodes snapped
-    to the nearest junction. Returns per city:
-      una_btw  - weighted betweenness: share (0-1) of population-weighted
-                 shortest paths between city pairs that pass through the city
-      una_reach- reach(100 km): total city population within 100 network-km
+    to the nearest junction. One variant is computed per entry of
+    `boost_sets` (tag -> set of Hanson primary keys): those capital cities
+    get population x CAPITAL_BOOST. Betweenness is exact Brandes
+    accumulation — every tied shortest path counts fractionally (sigma-split)
+    for both junction nodes and road edges.
+
+    Returns {tag: {"df", "nodes", "road_load"}} where per variant:
+      df        - per city una_btw_{tag}: share of weighted path pairs
+                  passing through the city; plus una_reach (variant-
+                  independent): population within 100 network-km
+      nodes     - busy junctions, load = share of total pair weight
+      road_load - per ORIGINAL road chunk, load share (max of its sub-edges)
     Cities farther than UNA_SNAP_KM from the network are excluded (NaN).
     """
     P = _planar_graph(roads_metric)
@@ -753,86 +819,122 @@ def una_analysis(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> pd
         snap_map.update({i: (r["node"], r["d"]) for i, r in fb.iterrows()})
     near = {i: nd for i, nd in snap_map.items() if nd[1] <= max_snap}
 
-    attach, weight = {}, {}  # city row-index -> node, node -> summed population
+    attach, base_weight = {}, {}  # city row-index -> node, node -> summed population
     for idx, (node, _) in near.items():
         c = cities.iloc[idx]
         attach[idx] = node
         w = c["population"] if c["population"] == c["population"] else 0.0
-        weight[node] = weight.get(node, 0.0) + w
+        base_weight[node] = base_weight.get(node, 0.0) + w
     print(f"UNA: {len(attach)} cities on network (<= {UNA_SNAP_KM} km), "
           f"{len(cities) - len(attach)} off-network")
 
     H, chains = _contract_chains(P, set(attach.values()))
-    od = sorted(n for n in set(attach.values()) if weight.get(n, 0) > 0)
-    btw = {n: 0.0 for n in attach.values()}
-    reach = {n: 0.0 for n in attach.values()}
-    btw_all, edge_load = {}, {}
-    total_pairs = 0.0
+    od = sorted(n for n in set(attach.values()) if base_weight.get(n, 0) > 0)
+
+    weights = {}  # per variant: node -> boosted summed population
+    for tag, keys in boost_sets.items():
+        w = {}
+        for idx, node in attach.items():
+            c = cities.iloc[idx]
+            p = c["population"] if c["population"] == c["population"] else 0.0
+            if str(c["Primary Key"]) in keys:
+                p *= CAPITAL_BOOST
+            w[node] = w.get(node, 0.0) + p
+        weights[tag] = w
+        W = sum(w[n] for n in od)
+        print(f"UNA variant '{tag}': {sum(1 for n in od)} weighted nodes, "
+              f"total weight {W:,.0f}, {len(keys)} capitals x{CAPITAL_BOOST:g}")
+
+    btw = {tag: {n: 0.0 for n in attach.values()} for tag in boost_sets}
+    btw_all = {tag: {} for tag in boost_sets}
+    edge_load = {tag: {} for tag in boost_sets}
+    totals = {}  # ordered pair weight sums (variant-specific normalizers)
+    for tag, w in weights.items():
+        W = sum(w[n] for n in od)
+        totals[tag] = sum(w[s] * (W - w[s]) for s in od)
+    reach = {}
+
     for s in od:
         pred, dist = nx.dijkstra_predecessor_and_distance(H, s, weight="km")
-        reach[s] = sum(weight[t] for t in od
+        reach[s] = sum(base_weight[t] for t in od
                        if t in dist and t != s and dist[t] <= UNA_REACH_KM)
-        for t in od:
-            if t <= s or t not in dist:
-                continue
-            w = weight[s] * weight[t]
-            total_pairs += w
-            path, cur = [t], t           # one shortest path via predecessors
-            while cur != s:
-                ps = pred.get(cur)
-                if not ps:
-                    break
-                cur = ps[0]
-                path.append(cur)
-            for nd in path[1:-1]:
-                btw_all[nd] = btw_all.get(nd, 0.0) + w
-                if nd in btw:
-                    btw[nd] += w
-            for a, b in zip(path[:-1], path[1:]):
-                key = (a, b) if a <= b else (b, a)
-                edge_load[key] = edge_load.get(key, 0.0) + w
+        order = sorted(dist, key=lambda v: dist[v])
+        sigma = dict.fromkeys(dist, 0)  # number of shortest s->v paths
+        sigma[s] = 1
+        for v in order:
+            for p in pred.get(v, ()):
+                sigma[v] += sigma[p]
+        for tag, w in weights.items():
+            ws = w[s]
+            delta = dict.fromkeys(dist, 0.0)  # dependency of s, split by sigma
+            for v in reversed(order):
+                if v == s:
+                    continue
+                dv = delta[v] + w.get(v, 0.0)
+                if dv <= 0:
+                    continue
+                for p in pred.get(v, ()):
+                    share = sigma[p] / sigma[v] * dv
+                    delta[p] += share
+                    ek = (p, v) if p <= v else (v, p)
+                    edge_load[tag][ek] = edge_load[tag].get(ek, 0.0) + ws * share
+                if delta[v] > 0:  # interior nodes only (endpoints excluded)
+                    if v in btw[tag]:
+                        btw[tag][v] += ws * delta[v]
+                    btw_all[tag][v] = btw_all[tag].get(v, 0.0) + ws * delta[v]
 
-    rows = []
-    for idx, node in attach.items():
-        pk = cities.iloc[idx]["Primary Key"]
-        rows.append((pk, btw[node] / total_pairs if total_pairs else 0.0, reach[node]))
-    df = pd.DataFrame(rows, columns=["Primary Key", "una_btw", "una_reach"])
-    df.to_csv(OUT / "cities_una.csv", index=False)
-    print("saved cities_una.csv")
-
-    # network geometry colored by weighted path load (share of total pair weight)
-    nodes_gdf = gpd.GeoDataFrame(
-        {"load": [btw_all[n] / total_pairs for n in btw_all if btw_all[n] > 0]},
-        geometry=gpd.points_from_xy(*zip(*[n for n in btw_all if btw_all[n] > 0])),
-        crs=roads_metric.crs).to_crs(4326)
     # attribute busy sub-edges back to the ORIGINAL road chunks: expand every
     # contracted edge to its planar chain (each planar sub-edge lies on exactly
     # one chunk), then snap each sub-edge's midpoint to that chunk (exact, the
     # midpoint is interior). A chunk's load = max over its busy sub-edges.
-    planar_edge_load = {}
-    for (a, b), w in edge_load.items():
-        key = (a, b) if a <= b else (b, a)
-        seq = chains.get(key, [a, b])
-        if seq[0] != a:
-            seq = seq[::-1]
-        for u, v in zip(seq[:-1], seq[1:]):
-            pk = (u, v) if u <= v else (v, u)
-            planar_edge_load[pk] = planar_edge_load.get(pk, 0.0) + w
-    busy = gpd.GeoDataFrame(
-        {"load": [v / total_pairs for v in planar_edge_load.values() if v > 0]},
-        geometry=[LineString(k) for k, v in planar_edge_load.items() if v > 0],
-        crs=roads_metric.crs)
-    mids = gpd.GeoDataFrame(
-        {"load": busy["load"].values},
-        geometry=[g.interpolate(0.5, normalized=True) for g in busy.geometry],
-        crs=roads_metric.crs)
-    near = gpd.sjoin_nearest(mids, roads_metric.reset_index(drop=True)[["geometry"]])
-    near = near[~near.index.duplicated(keep="first")]
-    road_load = near.groupby("index_right")["load"].max()
-    road_load.index = road_load.index.astype(int)
-    print(f"UNA network: {len(nodes_gdf)} busy junctions, "
-          f"{len(road_load)} of {len(roads_metric)} road chunks carry traffic")
-    return df, nodes_gdf, road_load
+    def expand_road_load(el, total):
+        planar_edge_load = {}
+        for (a, b), w in el.items():
+            key = (a, b) if a <= b else (b, a)
+            seq = chains.get(key, [a, b])
+            if seq[0] != a:
+                seq = seq[::-1]
+            for u, v in zip(seq[:-1], seq[1:]):
+                pk = (u, v) if u <= v else (v, u)
+                planar_edge_load[pk] = planar_edge_load.get(pk, 0.0) + w
+        busy = gpd.GeoDataFrame(
+            {"load": [v / total for v in planar_edge_load.values() if v > 0]},
+            geometry=[LineString(k) for k, v in planar_edge_load.items() if v > 0],
+            crs=roads_metric.crs)
+        mids = gpd.GeoDataFrame(
+            {"load": busy["load"].values},
+            geometry=[g.interpolate(0.5, normalized=True) for g in busy.geometry],
+            crs=roads_metric.crs)
+        near = gpd.sjoin_nearest(mids, roads_metric.reset_index(drop=True)[["geometry"]])
+        near = near[~near.index.duplicated(keep="first")]
+        road_load = near.groupby("index_right")["load"].max()
+        road_load.index = road_load.index.astype(int)
+        return road_load
+
+    out = {}
+    df_all = None
+    for tag in boost_sets:
+        total = totals[tag] if totals[tag] else 1.0
+        rows = [(cities.iloc[idx]["Primary Key"],
+                 btw[tag][node] / total,
+                 reach.get(node, 0.0))
+                for idx, node in attach.items()]
+        df = pd.DataFrame(rows, columns=["Primary Key", f"una_btw_{tag}", "una_reach"])
+        nodes_gdf = gpd.GeoDataFrame(
+            {"load": [btw_all[tag][n] / total for n in btw_all[tag] if btw_all[tag][n] > 0]},
+            geometry=gpd.points_from_xy(*zip(*[n for n in btw_all[tag] if btw_all[tag][n] > 0])),
+            crs=roads_metric.crs).to_crs(4326)
+        road_load = expand_road_load(edge_load[tag], total)
+        road_load.index.name = "chunk"
+        road_load.rename("load").to_csv(OUT / f"road_load_{tag}.csv")
+        print(f"UNA '{tag}': {len(nodes_gdf)} busy junctions, "
+              f"{len(road_load)} of {len(roads_metric)} road chunks carry traffic")
+        out[tag] = {"df": df, "nodes": nodes_gdf, "road_load": road_load}
+        df_all = df if df_all is None else df_all.drop(columns=["una_reach"]).merge(
+            df, on="Primary Key")
+    df_all.to_csv(OUT / "cities_una.csv", index=False)
+    print("saved cities_una.csv")
+    return out
 
 
 def empire_extent(roads_metric: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -928,7 +1030,7 @@ def export_gexf(G: nx.Graph) -> None:
 
 def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                       wiki_urls: dict = None, founders: dict = None,
-                      road_load=None, una_nodes: gpd.GeoDataFrame = None) -> None:
+                      una: dict = None) -> None:
     esri_dark = folium.TileLayer(
         tiles=("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
                "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"),
@@ -1008,8 +1110,12 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                     pop_line += f" ({yr})"
             else:
                 pop_line = "<br>Population: 0k (no estimate)"
+            caps = ""
+            for col, text in (("imp_label", c.get("imp_label")), ("prov_label", c.get("prov_label"))):
+                if text is not None and text == text:
+                    caps += f"<br>{text}"
             return (f"<b>{name}</b> ({c['Modern Toponym']})<br>"
-                    f"Established: {fmt_year(c['Start Date'])}{founded}{pop_line}<br>"
+                    f"Established: {fmt_year(c['Start Date'])}{founded}{pop_line}{caps}<br>"
                     f"Province: {c['Province']}<br>Rank: {c['Barrington Atlas Rank']}")
 
         def radius_for(c):
@@ -1037,7 +1143,8 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 return RANK_COLORS[1]
             return color
 
-        btw_color = una_scaler(cities["una_btw"]) if "una_btw" in cities.columns else (lambda v: POP_UNKNOWN_COLOR)
+        btw_color = (una_scaler(cities["una_btw_iprov"]) if "una_btw_iprov" in cities.columns
+                     else (lambda v: POP_UNKNOWN_COLOR))
         reach_color = una_scaler(cities["una_reach"]) if "una_reach" in cities.columns else (lambda v: POP_UNKNOWN_COLOR)
         nation_cols = nation_colors(cities, founders or {})
         schemes = [
@@ -1047,8 +1154,8 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
              lambda c: pop_class_color(c["population"])),
             ("Cities — Foundation nation", False,
              lambda c: nation_cols[foundation_nation(_city_founder(c, founders or {}), c)]),
-            ("Cities — UNA betweenness (weighted)", False,
-             lambda c: btw_color(c.get("una_btw"))),
+            ("Cities — UNA betweenness (capitals ×2)", False,
+             lambda c: btw_color(c.get("una_btw_iprov"))),
             ("Cities — UNA reach (100 km)", False,
              lambda c: reach_color(c.get("una_reach"))),
         ]
@@ -1071,8 +1178,9 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 ).add_to(fg)
             fg.add_to(m)
 
-        # UNA network layers: ORIGINAL road chunks colorized by weighted path
-        # load (same geometry as the base roads layer), plus busy junctions
+        # UNA network layers per capital variant: ORIGINAL road chunks colorized
+        # by weighted path load (same geometry as the base roads layer), plus
+        # busy junctions. 'UNA net' in the name groups them in the layer JS.
         def _load_color(share):
             if share > 0.05:
                 return RANK_COLORS[1]
@@ -1082,38 +1190,69 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 return RANK_COLORS[3]
             return RANK_COLORS[4]
 
-        if road_load is not None and len(road_load):
-            peak = road_load.max()
-            fg_net = folium.FeatureGroup(name="UNA net — roads by weighted path load",
-                                         show=False)
-            for i, geom in enumerate(roads.geometry):
-                share = road_load.get(i, 0.0)
-                if share > 0:
-                    folium.PolyLine(
-                        [[lat, lng] for lng, lat in geom.coords],
-                        color=_load_color(share), weight=1 + 2.5 * (share / peak),
-                        opacity=0.85,
-                        tooltip=f"road: {share * 100:.1f}% of weighted paths",
-                    ).add_to(fg_net)
-                else:
-                    folium.PolyLine(
-                        [[lat, lng] for lng, lat in geom.coords],
-                        color="#3a3a3a", weight=0.4, opacity=0.6,
-                    ).add_to(fg_net)
-            fg_net.add_to(m)
-        if una_nodes is not None and len(una_nodes):
-            peak = una_nodes["load"].max()
-            fg_jun = folium.FeatureGroup(name="UNA net — junctions by path traffic",
-                                         show=False)
-            for _, nd in una_nodes.iterrows():
-                v = nd["load"] / peak
+        for tag, label in UNA_VARIANTS.items():
+            v = (una or {}).get(tag)
+            if v is None:
+                continue
+            road_load, una_nodes = v["road_load"], v["nodes"]
+            if road_load is not None and len(road_load):
+                peak = road_load.max()
+                fg_net = folium.FeatureGroup(name=f"UNA net — roads by load ({label})",
+                                             show=False)
+                for i, geom in enumerate(roads.geometry):
+                    share = road_load.get(i, 0.0)
+                    if share > 0:
+                        folium.PolyLine(
+                            [[lat, lng] for lng, lat in geom.coords],
+                            color=_load_color(share), weight=1 + 2.5 * (share / peak),
+                            opacity=0.85,
+                            tooltip=f"road: {share * 100:.1f}% of weighted paths ({label})",
+                        ).add_to(fg_net)
+                    else:
+                        folium.PolyLine(
+                            [[lat, lng] for lng, lat in geom.coords],
+                            color="#3a3a3a", weight=0.4, opacity=0.6,
+                        ).add_to(fg_net)
+                fg_net.add_to(m)
+            if una_nodes is not None and len(una_nodes):
+                peak = una_nodes["load"].max()
+                fg_jun = folium.FeatureGroup(name=f"UNA net — junctions by traffic ({label})",
+                                             show=False)
+                for _, nd in una_nodes.iterrows():
+                    vj = nd["load"] / peak
+                    folium.CircleMarker(
+                        [nd.geometry.y, nd.geometry.x],
+                        radius=2 + 5 * vj, color="#333333", weight=0.3, fill=True,
+                        fill_color=_load_color(nd["load"]), fill_opacity=0.9,
+                        tooltip=f"junction: {nd['load'] * 100:.1f}% of weighted paths ({label})",
+                    ).add_to(fg_jun)
+                fg_jun.add_to(m)
+
+        # capital cities as their own overlay layers (star = imperial,
+        # ring = provincial-only, so the four dual cities keep one marker)
+        if "imp_label" in cities.columns:
+            fg_cap = folium.FeatureGroup(name="Imperial capitals (×2 weight)", show=False)
+            for _, c in cities[cities["imp_label"].notna()].iterrows():
+                folium.Marker(
+                    [c.geometry.y, c.geometry.x],
+                    icon=folium.Icon(icon="star", color="orange"),
+                    tooltip=info_for(c, c["Ancient Toponym"]),
+                    popup=folium.Popup(info_for(c, c["Ancient Toponym"]), max_width=280),
+                ).add_to(fg_cap)
+            fg_cap.add_to(m)
+        if "prov_label" in cities.columns:
+            fg_pcap = folium.FeatureGroup(name="Provincial capitals (×2 weight)", show=False)
+            prov_only = cities["prov_label"].notna()
+            if "imp_label" in cities.columns:
+                prov_only &= cities["imp_label"].isna()
+            for _, c in cities[prov_only].iterrows():
                 folium.CircleMarker(
-                    [nd.geometry.y, nd.geometry.x],
-                    radius=2 + 5 * v, color="#333333", weight=0.3, fill=True,
-                    fill_color=_load_color(nd["load"]), fill_opacity=0.9,
-                    tooltip=f"junction: {nd['load'] * 100:.1f}% of weighted paths",
-                ).add_to(fg_jun)
-            fg_jun.add_to(m)
+                    [c.geometry.y, c.geometry.x],
+                    radius=8, color="#8ab4f8", weight=2.5, fill=False,
+                    tooltip=info_for(c, c["Ancient Toponym"]),
+                    popup=folium.Popup(info_for(c, c["Ancient Toponym"]), max_width=280),
+                ).add_to(fg_pcap)
+            fg_pcap.add_to(m)
 
         # legend panel: rollable sections, aligned with the upper control
         def swatches(colors):
@@ -1146,6 +1285,13 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 "off network": POP_UNKNOWN_COLOR, "zero": RANK_COLORS[5],
                 "lowest quartile": RANK_COLORS[4], "lower-mid": RANK_COLORS[3],
                 "upper-mid": RANK_COLORS[2], "top quartile": RANK_COLORS[1]}))
+            + section("6. Capitals (population ×2 weight)",
+                      '<span style="color:#ffa500;font-size:14px">&#9733;</span>'
+                      ' imperial capital / residence<br>'
+                      '<span style="color:#8ab4f8;font-size:14px">&#9678;</span>'
+                      ' provincial capital<br>'
+                      '<span style="color:#8b949e">the UNA betweenness scheme uses the'
+                      ' imperial+provincial variant</span>')
             + '</div></div>'
             '<script>window.addEventListener("load",function(){setTimeout(function(){'
             # roll whole panel up/down
@@ -1199,9 +1345,13 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             'function hdr(txt){var d=document.createElement("div");d.textContent=txt;'
             'd.style.cssText="font-weight:600;margin:6px 0 2px;color:#8ab4f8;'
             'border-top:1px solid #555;padding-top:6px";return d;}'
-            'var fm=null,fu=null;'
+            'var fm=null,fu=null,fc=null;'
             'all.forEach(function(o){if(!fm&&o.g==="cityScheme"){fm=o.lab;}'
             'if(!fu&&o.g==="cityUNA"){fu=o.lab;}});'
+            'document.querySelectorAll(".leaflet-control-layers-overlays label")'
+            '.forEach(function(l){var t=l.textContent||"";'
+            'if(!fc&&t.indexOf("capitals (")>=0&&t.indexOf("UNA net")<0){fc=l;}});'
+            'if(cont&&fc){cont.insertBefore(hdr("CAPITALS"),fc);}'
             'if(cont&&fu){cont.insertBefore(hdr("UNA ANALYSIS"),fu);}'
             'if(cont&&fm){cont.insertBefore(hdr("CITY SCHEMES"),fm);}'
             '},200);});</script>')
@@ -1234,6 +1384,8 @@ def write_findings(hexes: pd.DataFrame, G: nx.Graph, cities: gpd.GeoDataFrame = 
         for i, row in top.iterrows():
             lines.append(f"| {i + 1} | {row['cell']} | {row['lat']:.2f} | {row['lng']:.2f} | {row[metric]:.0f} |")
         lines.append("")
+    lines += ["Hexagon betweenness is **km-weighted** (edge lengths as path costs), "
+              "replacing the earlier hop-count variant.", ""]
 
     top_deg = hexes.loc[hexes["degree"].idxmax(), "cell"]
     lines += ["## Verdict", "",
@@ -1259,28 +1411,48 @@ def write_findings(hexes: pd.DataFrame, G: nx.Graph, cities: gpd.GeoDataFrame = 
                          f"{str(r['source']).split(' (')[0]} |")
         lines += [""]
 
-    if cities is not None and "una_btw" in cities.columns:
-        u = cities.dropna(subset=["una_btw"])
-        lines += ["## UNA weighted network centrality", "",
+    if cities is not None and "una_btw_iprov" in cities.columns:
+        u = cities.dropna(subset=["una_btw_iprov"])
+        lines += ["## UNA weighted network centrality (two capital variants)", "",
                   "Urban Network Analysis methodology (City Form Lab, MIT) applied to the "
                   "road network: cities act as population-weighted nodes on metric edges; "
                   "**weighted betweenness** = share of population-weighted shortest paths "
-                  "between city pairs passing through a city; **reach (100 km)** = total "
-                  f"city population within 100 network-km. {len(u)} of {len(cities)} cities "
-                  "are on the network (snap limit 10 km).", "",
-                  "### Top cities by weighted betweenness", "",
-                  "| # | city | share of weighted paths | reach (100 km) |", "|---|---|---|---|"]
-        for i, (_, r) in enumerate(u.nlargest(10, "una_btw").iterrows(), 1):
-            lines.append(f"| {i} | {r['Ancient Toponym']} | {r['una_btw'] * 100:.1f}% | "
-                         f"~{int(r['una_reach']):,} |")
-        lines += ["", "### Top cities by reach (100 km)", "",
-                  "| # | city | reach (100 km) | weighted betweenness |", "|---|---|---|---|"]
+                  "between city pairs passing through a city, with every tied shortest "
+                  "path counted fractionally (exact Brandes accumulation); **reach (100 km)** "
+                  f"= total city population within 100 network-km. {len(u)} of {len(cities)} "
+                  "cities are on the network (snap limit 10 km).", "",
+                  "Two variants are computed: capitals (imperial; then imperial + "
+                  "provincial) carry population **x 2**. Note the deliberate anachronism: "
+                  "populations refer to AD 100-165 while most imperial capitals are "
+                  "284-476 - the boost models administrative pull across the imperial era.", ""]
+        for col, title in (("una_btw_imp", "imperial capitals ×2"),
+                           ("una_btw_iprov", "imperial + provincial capitals ×2")):
+            lines += [f"### Top cities by weighted betweenness ({title})", "",
+                      "| # | city | share of weighted paths | reach (100 km) |",
+                      "|---|---|---|---|"]
+            for i, (_, r) in enumerate(u.nlargest(10, col).iterrows(), 1):
+                lines.append(f"| {i} | {r['Ancient Toponym']} | {r[col] * 100:.1f}% | "
+                             f"~{int(r['una_reach']):,} |")
+            lines.append("")
+        lines += ["### Top cities by reach (100 km)", "",
+                  "| # | city | reach (100 km) | weighted betweenness (imp+prov) |",
+                  "|---|---|---|---|"]
         for i, (_, r) in enumerate(u.nlargest(10, "una_reach").iterrows(), 1):
             lines.append(f"| {i} | {r['Ancient Toponym']} | ~{int(r['una_reach']):,} | "
-                         f"{r['una_btw'] * 100:.1f}% |")
+                         f"{r['una_btw_iprov'] * 100:.1f}% |")
+        lines += ["", "### Imperial capitals and residences (population ×2)", "",
+                  "| city | role | years |", "|---|---|---|"]
+        caps = cities[cities["imp_label"].notna()]
+        for _, r in caps.iterrows():
+            label = str(r["imp_label"])
+            role = label.split(" (")[0].replace("Imperial ", "")
+            years = label.split(" (")[1][:-1] if " (" in label else ""
+            lines.append(f"| {r['Ancient Toponym']} | {role} | {years} |")
         lines += ["", "Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); "
                   "network = DARMC 2008 with edge weights in km (Lambert Conformal Conic); "
-                  "weights = population estimates (see section above).", ""]
+                  "weights = population estimates (see section above) with capitals x2 "
+                  "(curated lists: data/capitals_imperial.csv, data/capitals_provincial.csv).",
+                  ""]
 
     if cities is not None:
         n_total, n_conn = len(cities), int(cities["connected"].sum())
@@ -1311,12 +1483,14 @@ def write_findings(hexes: pd.DataFrame, G: nx.Graph, cities: gpd.GeoDataFrame = 
 def main() -> None:
     roads_raw = gpd.read_file(DATA)  # Lambert Conformal Conic, metres
     roads = load_roads()
-    cities = connect_cities(load_cities(), roads_raw)
+    cities = connect_cities(annotate_capitals(load_cities()), roads_raw)
     plot_base_map(roads, cities)
     G = build_graph(roads, roads_raw.geometry.length / 1000)
     nodes = compute_centralities(G)
-    una, una_nodes, road_load = una_analysis(cities, roads_raw)
-    cities = cities.merge(una, on="Primary Key", how="left")
+    una = una_analysis(cities, roads_raw, load_capitals())
+    una_merged = una["imp"]["df"].drop(columns=["una_reach"]).merge(
+        una["iprov"]["df"], on="Primary Key")
+    cities = cities.merge(una_merged, on="Primary Key", how="left")
     extent = empire_extent(roads_raw)  # metric CRS buffer
     hexes = hex_scores(nodes, extent)
     rome, rome_kind = get_rome_boundary()
@@ -1326,8 +1500,7 @@ def main() -> None:
     export_gexf(G)
     wiki_urls = resolve_wiki_links(cities)
     founders = resolve_founders(cities, wiki_urls)
-    build_interactive(roads, hexes, rome, cities, wiki_urls, founders,
-                      road_load, una_nodes)
+    build_interactive(roads, hexes, rome, cities, wiki_urls, founders, una)
     write_findings(hexes, G, cities)
     print("done.")
 

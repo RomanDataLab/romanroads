@@ -23,16 +23,18 @@ Rome's hexagon ranks **#1** by summed betweenness.
 
 | rank | cell | lat | lng | value |
 |---|---|---|---|---|
-| 1 | 831e80fffffffff | 42.05 | 12.98 | 32168838 |
-| 2 | 831ec9fffffffff | 40.94 | 29.00 | 16950084 |
-| 3 | 831ec8fffffffff | 41.05 | 27.48 | 12231446 |
-| 4 | 831f99fffffffff | 45.55 | 9.60 | 12163320 |
-| 5 | 831ef5fffffffff | 44.17 | 20.68 | 11318281 |
-| 6 | 831f8bfffffffff | 46.65 | 11.86 | 10731355 |
-| 7 | 831e16fffffffff | 46.76 | 13.45 | 10485743 |
-| 8 | 831e13fffffffff | 45.96 | 15.90 | 10136902 |
-| 9 | 831e1efffffffff | 46.01 | 17.51 | 9253405 |
-| 10 | 831e10fffffffff | 46.85 | 15.06 | 9234493 |
+| 1 | 831e80fffffffff | 42.05 | 12.98 | 68562426 |
+| 2 | 831f99fffffffff | 45.55 | 9.60 | 17555972 |
+| 3 | 831ec9fffffffff | 40.94 | 29.00 | 16951992 |
+| 4 | 831e16fffffffff | 46.76 | 13.45 | 14567149 |
+| 5 | 831f8bfffffffff | 46.65 | 11.86 | 13603374 |
+| 6 | 831ef5fffffffff | 44.17 | 20.68 | 12313940 |
+| 7 | 831ec8fffffffff | 41.05 | 27.48 | 12231446 |
+| 8 | 831e1bfffffffff | 45.11 | 19.91 | 12018934 |
+| 9 | 832d34fffffffff | 39.91 | 29.63 | 10513846 |
+| 10 | 832d12fffffffff | 37.33 | 35.13 | 10267096 |
+
+Hexagon betweenness is **km-weighted** (edge lengths as path costs), replacing the earlier hop-count variant.
 
 ## Verdict
 
@@ -55,41 +57,73 @@ Population estimates cover **887 of 1388** cities (210 from Hanson & Ortman 2017
 | 9 | Syracusae | Syracuse | Silicia | ~83,834 | Hanson & Ortman 2017 |
 | 10 | Arsinoe | Kom F?ris | Aegyptus | ~82,897 | Hanson 2016 area x density fit |
 
-## UNA weighted network centrality
+## UNA weighted network centrality (two capital variants)
 
-Urban Network Analysis methodology (City Form Lab, MIT) applied to the road network: cities act as population-weighted nodes on metric edges; **weighted betweenness** = share of population-weighted shortest paths between city pairs passing through a city; **reach (100 km)** = total city population within 100 network-km. 1173 of 1388 cities are on the network (snap limit 10 km).
+Urban Network Analysis methodology (City Form Lab, MIT) applied to the road network: cities act as population-weighted nodes on metric edges; **weighted betweenness** = share of population-weighted shortest paths between city pairs passing through a city, with every tied shortest path counted fractionally (exact Brandes accumulation); **reach (100 km)** = total city population within 100 network-km. 1173 of 1388 cities are on the network (snap limit 10 km).
 
-### Top cities by weighted betweenness
+Two variants are computed: capitals (imperial; then imperial + provincial) carry population **x 2**. Note the deliberate anachronism: populations refer to AD 100-165 while most imperial capitals are 284-476 - the boost models administrative pull across the imperial era.
+
+### Top cities by weighted betweenness (imperial capitals ×2)
 
 | # | city | share of weighted paths | reach (100 km) |
 |---|---|---|---|
-| 1 | Aquileia | 41.7% | ~47,153 |
-| 2 | Concordia | 41.5% | ~91,968 |
-| 3 | Philippopolis (Thracia) | 39.5% | ~4,096 |
-| 4 | Hadrianopolis (Thracia) | 39.5% | ~0 |
-| 5 | Heraclea (Thracia) | 38.6% | ~0 |
-| 6 | Chalcedon | 37.9% | ~60,761 |
-| 7 | Byzantium | 37.9% | ~60,761 |
-| 8 | Nicomedia | 36.9% | ~59,495 |
-| 9 | Nicaea | 36.8% | ~60,761 |
-| 10 | Cibalae | 35.2% | ~22,247 |
+| 1 | Aquileia | 26.7% | ~47,153 |
+| 2 | Concordia | 26.6% | ~91,968 |
+| 3 | Philippopolis (Thracia) | 24.2% | ~4,096 |
+| 4 | Hadrianopolis (Thracia) | 24.2% | ~0 |
+| 5 | Heraclea (Thracia) | 23.7% | ~0 |
+| 6 | Chalcedon | 22.9% | ~60,761 |
+| 7 | Byzantium | 22.9% | ~60,761 |
+| 8 | Cibalae | 22.2% | ~22,247 |
+| 9 | Bassiana (Pannonia Inferior) | 21.9% | ~18,331 |
+| 10 | Sirmium | 21.9% | ~14,877 |
+
+### Top cities by weighted betweenness (imperial + provincial capitals ×2)
+
+| # | city | share of weighted paths | reach (100 km) |
+|---|---|---|---|
+| 1 | Aquileia | 24.7% | ~47,153 |
+| 2 | Concordia | 24.6% | ~91,968 |
+| 3 | Philippopolis (Thracia) | 22.8% | ~4,096 |
+| 4 | Hadrianopolis (Thracia) | 22.7% | ~0 |
+| 5 | Heraclea (Thracia) | 22.2% | ~0 |
+| 6 | Chalcedon | 21.6% | ~60,761 |
+| 7 | Byzantium | 21.6% | ~60,761 |
+| 8 | Nicaea | 20.8% | ~60,761 |
+| 9 | Cibalae | 20.7% | ~22,247 |
+| 10 | Nicomedia | 20.6% | ~59,495 |
 
 ### Top cities by reach (100 km)
 
-| # | city | reach (100 km) | weighted betweenness |
+| # | city | reach (100 km) | weighted betweenness (imp+prov) |
 |---|---|---|---|
-| 1 | Veii | ~1,155,750 | 0.6% |
-| 2 | Ferentinum | ~1,148,423 | 4.6% |
-| 3 | Portus | ~1,144,410 | 0.5% |
+| 1 | Veii | ~1,155,750 | 0.3% |
+| 2 | Ferentinum | ~1,148,423 | 2.5% |
+| 3 | Portus | ~1,144,410 | 0.2% |
 | 4 | Aletrium | ~1,142,151 | 0.0% |
 | 5 | Verulae | ~1,142,151 | 0.0% |
 | 6 | Tusculum | ~1,136,587 | 0.0% |
-| 7 | Praeneste | ~1,135,857 | 0.1% |
-| 8 | Gabii | ~1,135,046 | 0.1% |
-| 9 | Fidenae | ~1,133,857 | 0.3% |
-| 10 | Baccanae | ~1,128,715 | 2.7% |
+| 7 | Praeneste | ~1,135,857 | 0.0% |
+| 8 | Gabii | ~1,135,046 | 0.0% |
+| 9 | Fidenae | ~1,133,857 | 0.2% |
+| 10 | Baccanae | ~1,128,715 | 1.9% |
 
-Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 2008 with edge weights in km (Lambert Conformal Conic); weights = population estimates (see section above).
+### Imperial capitals and residences (population ×2)
+
+| city | role | years |
+|---|---|---|
+| Nicomedia | capital | AD 284–AD 330 |
+| Eburacum | residence | AD 305–AD 306 |
+| Colonia Augusta Treverorum | residence | AD 293–AD 395 |
+| Roma | capital | 27 BC–AD 330 |
+| Ravenna | capital | AD 402–AD 476 |
+| Mediolanum (Italia (XI Transpadana)) | capital | AD 286–AD 402 |
+| Thessalonica | residence | AD 293–AD 311 |
+| Sirmium | residence | AD 293–AD 318 |
+| Antiochia (Syria) | residence | AD 337–AD 361 |
+| Byzantium | capital | AD 330–AD 476 |
+
+Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 2008 with edge weights in km (Lambert Conformal Conic); weights = population estimates (see section above) with capitals x2 (curated lists: data/capitals_imperial.csv, data/capitals_provincial.csv).
 
 ## Roman cities connected by the roads
 

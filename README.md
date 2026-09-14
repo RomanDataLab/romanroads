@@ -6,16 +6,19 @@ Milan Janosov's 2023 analysis ([Towards Data Science](https://towardsdatascience
 ## What it does
 
 1. Loads the **DARMC Roman Road Network (2008)** shapefile and reprojects to EPSG:4326.
-2. Builds an undirected graph from road segment endpoints (unweighted, as in the original methodology) → 5,086 nodes / 7,048 edges / 100 components.
-3. Computes **degree** and **betweenness centrality** per node.
+2. Builds an undirected graph from road segment endpoints → 5,086 nodes / 7,048 edges / 100 components.
+3. Computes **degree** and **km-weighted betweenness centrality** per node.
 4. Aggregates node scores into **H3 hexagons (resolution 3)** covering the Empire's extent (20 km buffer).
 5. Loads **1,388 Roman cities** (Hanson 2016) and measures each city's distance to the nearest road.
-6. Emits static maps (PNG), an interactive folium map (HTML), a GEXF graph for Gephi, CSVs, and findings.
+6. **UNA centrality with capitals ×2** — two variants (10 imperial capitals; 46 imperial + provincial, curated in `data/capitals_*.csv`) where capital node weight = population × 2. Weighted betweenness uses exact Brandes accumulation (tied shortest paths split fractionally). Each variant gets its own roads/junctions map layer.
+7. Emits static maps (PNG), an interactive folium map (HTML), a GEXF graph for Gephi, CSVs, and findings.
 
 ## Findings
 
-- Rome's hexagon ranks **#1 by both summed degree and summed betweenness** — the data says yes, all roads led to Rome.
+- Rome's hexagon ranks **#1 by both summed degree and summed km-weighted betweenness** — the data says yes, all roads led to Rome.
 - **1,105 of 1,388 cities (80%)** lie within 5 km of a digitized road.
+- Corridor capitals carry the through-traffic (Byzantium 22.9%, Sirmium 21.9%, Ravenna 18.3%, Nicomedia 21.7%); terminal capitals — Rome, York, Carthage — carry almost none: betweenness measures position on paths, not importance.
+- Boosting all 46 capitals lifts Nicaea and Nicomedia into the top ten (20.8% / 20.6%).
 - Major cities standing directly on a road: Damascus, Byzantium, Milan, Lepcis Magna, Lyon.
 - The unconnected majors cluster in **Crete** and the **Peloponnesian interior** — a digitization gap in the DARMC layer, not an ancient reality.
 
@@ -29,6 +32,8 @@ Milan Janosov's 2023 analysis ([Towards Data Science](https://towardsdatascience
 | `roman_roads_interactive.html` | Interactive map (hexmaps and OSM background hidden by default; toggle in layer control) |
 | `roman_roads_graph.gexf` | Graph for Gephi |
 | `nodes_centrality.csv` / `cities_road_access.csv` | Per-node and per-city data |
+| `cities_una.csv` | Per-city UNA betweenness for both capital variants + reach (100 km) |
+| `road_load_imp.csv` / `road_load_iprov.csv` | Per-road-chunk weighted path load per variant |
 | `findings.md` | Full results tables |
 
 ## Run
@@ -46,7 +51,7 @@ The pipeline writes the interactive map to `index.html` (the project start page)
 
 | Page | Content |
 |---|---|
-| `/` (`index.html`) | The interactive map: 3 city color schemes + UNA layers, legend with "About & methodology" button |
+| `/` (`index.html`) | The interactive map: 5 city color schemes, UNA net layers for both capital variants, imperial/provincial capital layers, legend with "About & methodology" button |
 | `/about.html` | Methodology, findings, top-10 tables, data sources |
 | `/output/...` | Static maps, findings.md, per-city CSVs, GEXF |
 
