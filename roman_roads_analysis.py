@@ -13,6 +13,7 @@ Pipeline (after Janosov, 2023, milanjanosov.substack.com):
   7. Emit maps (PNG), interactive map (HTML), GEXF for Gephi, CSVs, findings.
 """
 
+import base64
 import json
 import math
 import re
@@ -38,6 +39,7 @@ import h3
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data" / "roman_roads_v2008.shp"
+ASSETS = ROOT / "assets"
 CITIES_DATA = ROOT / "data" / "hanson2016_cities.csv"
 POP_DATA = ROOT / "data" / "city_populations.csv"
 WIKI_CACHE = ROOT / "data" / "city_wiki_links.csv"
@@ -1073,6 +1075,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         "#panelBody.rolled{display:none}"
         "#panelBody .ptab-empty{padding:12px;color:#8b949e}"
         "#cityLegend{padding:10px 14px;font:11px/1.5 system-ui;color:#e6edf3}"
+        ".capital-icon{background:none;border:none}"
         ".lg-h{font-weight:600;cursor:pointer;color:#8ab4f8;padding:2px 0}"
         ".lg-h::before{content:\"\\25B8 \";display:inline-block;transition:transform .15s}"
         ".lg-sec.open .lg-h::before{transform:rotate(90deg)}"
@@ -1235,17 +1238,30 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                     ).add_to(fg_jun)
                 fg_jun.add_to(m)
 
-        # capital cities as their own overlay layers (star = imperial,
-        # ring = provincial-only, so the four dual cities keep one marker)
+        # capital cities as their own overlay layers: SPQR flag = imperial,
+        # helmet = provincial-only, so the four dual cities keep one marker
+        # (icons: Flaticon, embedded as base64 so the map stays single-file)
+        def _icon_marker(c, uri, size):
+            return folium.Marker(
+                [c.geometry.y, c.geometry.x],
+                icon=folium.DivIcon(
+                    html=(f'<img src="{uri}" width="{size}" height="{size}"'
+                          f' style="filter:drop-shadow(0 1px 2px #000)" alt="capital">'),
+                    icon_size=(size, size), icon_anchor=(size // 2, size // 2),
+                    class_name="capital-icon"),
+                tooltip=info_for(c, c["Ancient Toponym"]),
+                popup=folium.Popup(info_for(c, c["Ancient Toponym"]), max_width=280))
+
+        def _icon_uri(name):
+            return "data:image/png;base64," + base64.b64encode(
+                (ASSETS / name).read_bytes()).decode()
+
+        imp_uri = _icon_uri("imperial_flag.png")
+        prov_uri = _icon_uri("provincial_rome.png")
         if "imp_label" in cities.columns:
             fg_cap = folium.FeatureGroup(name="Imperial capitals (×2 weight)", show=False)
             for _, c in cities[cities["imp_label"].notna()].iterrows():
-                folium.Marker(
-                    [c.geometry.y, c.geometry.x],
-                    icon=folium.Icon(icon="star", color="orange"),
-                    tooltip=info_for(c, c["Ancient Toponym"]),
-                    popup=folium.Popup(info_for(c, c["Ancient Toponym"]), max_width=280),
-                ).add_to(fg_cap)
+                _icon_marker(c, imp_uri, 28).add_to(fg_cap)
             fg_cap.add_to(m)
         if "prov_label" in cities.columns:
             fg_pcap = folium.FeatureGroup(name="Provincial capitals (×2 weight)", show=False)
@@ -1253,12 +1269,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             if "imp_label" in cities.columns:
                 prov_only &= cities["imp_label"].isna()
             for _, c in cities[prov_only].iterrows():
-                folium.CircleMarker(
-                    [c.geometry.y, c.geometry.x],
-                    radius=8, color="#8ab4f8", weight=2.5, fill=False,
-                    tooltip=info_for(c, c["Ancient Toponym"]),
-                    popup=folium.Popup(info_for(c, c["Ancient Toponym"]), max_width=280),
-                ).add_to(fg_pcap)
+                _icon_marker(c, prov_uri, 22).add_to(fg_pcap)
             fg_pcap.add_to(m)
 
         # legend panel: rollable sections, aligned with the upper control
@@ -1298,9 +1309,11 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 "lowest quartile": RANK_COLORS[4], "lower-mid": RANK_COLORS[3],
                 "upper-mid": RANK_COLORS[2], "top quartile": RANK_COLORS[1]}))
             + section("6. Capitals (population ×2 weight)",
-                      '<span style="color:#ffa500;font-size:14px">&#9733;</span>'
+                      f'<img src="{imp_uri}" width="14" height="14"'
+                      ' style="vertical-align:middle;margin:0 2px 0 0">'
                       ' imperial capital / residence<br>'
-                      '<span style="color:#8ab4f8;font-size:14px">&#9678;</span>'
+                      f'<img src="{prov_uri}" width="14" height="14"'
+                      ' style="vertical-align:middle;margin:0 2px 0 0">'
                       ' provincial capital<br>'
                       '<span style="color:#8b949e">the UNA betweenness scheme uses the'
                       ' imperial+provincial variant</span>')
