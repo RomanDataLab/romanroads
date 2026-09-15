@@ -1241,13 +1241,13 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         # capital cities as their own overlay layers: SPQR flag = imperial,
         # helmet = provincial-only, so the four dual cities keep one marker
         # (icons: Flaticon, embedded as base64 so the map stays single-file)
-        def _icon_marker(c, uri, size):
+        def _icon_marker(c, uri, size, anchor):
             return folium.Marker(
                 [c.geometry.y, c.geometry.x],
                 icon=folium.DivIcon(
                     html=(f'<img src="{uri}" width="{size}" height="{size}"'
                           f' style="filter:drop-shadow(0 1px 2px #000)" alt="capital">'),
-                    icon_size=(size, size), icon_anchor=(size // 2, size // 2),
+                    icon_size=(size, size), icon_anchor=anchor,
                     class_name="capital-icon"),
                 tooltip=info_for(c, c["Ancient Toponym"]),
                 popup=folium.Popup(info_for(c, c["Ancient Toponym"]), max_width=280))
@@ -1261,7 +1261,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
         if "imp_label" in cities.columns:
             fg_cap = folium.FeatureGroup(name="Imperial capitals (×2 weight)", show=False)
             for _, c in cities[cities["imp_label"].notna()].iterrows():
-                _icon_marker(c, imp_uri, 28).add_to(fg_cap)
+                _icon_marker(c, imp_uri, 28, anchor=(0, 28)).add_to(fg_cap)  # flag base at location
             fg_cap.add_to(m)
         if "prov_label" in cities.columns:
             fg_pcap = folium.FeatureGroup(name="Provincial capitals (×2 weight)", show=False)
@@ -1269,7 +1269,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             if "imp_label" in cities.columns:
                 prov_only &= cities["imp_label"].isna()
             for _, c in cities[prov_only].iterrows():
-                _icon_marker(c, prov_uri, 22).add_to(fg_pcap)
+                _icon_marker(c, prov_uri, 44, anchor=(22, 22)).add_to(fg_pcap)
             fg_pcap.add_to(m)
 
         # legend panel: rollable sections, aligned with the upper control
