@@ -126,6 +126,33 @@ Two variants are computed: capitals (imperial; then imperial + provincial) carry
 
 Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 2008 with edge weights in km (Lambert Conformal Conic); weights = population estimates (see section above) with capitals x2 (curated lists: data/capitals_imperial.csv, data/capitals_provincial.csv).
 
+## Roman sites under living modern cities
+
+46 Roman cities carry a modern successor of at least 300,000 inhabitants (nearest match within 15.0 km; modern population at the last year of the Reba et al. 2016 datasets, AD 1975). Top 20 by modern population:
+
+| Roman city | modern city | Roman pop (c. AD 165) | modern pop |
+|---|---|---|---|
+| Londinium | London | ~37,940 | ~10,500,000 |
+| Lutetia | Paris | ~6,767 | ~9,400,000 |
+| Heliopolis (Aegyptus) | Cairo | ~17,653 | ~8,400,000 |
+| Mediolanum (Italia (XI Transpadana)) | Milan | ~20,991 | ~3,800,000 |
+| Roma | Rome | ~923,406 | ~3,600,000 |
+| Barcino | Barcelona | ~1,157 | ~3,500,000 |
+| Athenae | Athens | ~58,114 | ~3,300,000 |
+| Byzantium | Istanbul | ~35,321 | ~3,200,000 |
+| Alexandria (Aegyptus) | Alexandria | ~410,535 | ~2,800,000 |
+| Aquincum | Budapest | ~3,937 | ~2,000,000 |
+| Neapolis (Italia (I Latium and Campania)) | Naples | ~15,086 | ~1,900,000 |
+| Augusta Taurinorum | Turin | ~8,633 | ~1,800,000 |
+| Colonia Agrippinensis | Cologne | ~13,426 | ~1,800,000 |
+| Icosium | Algiers | - | ~1,800,000 |
+| Ancyra | Ankara | ~24,456 | ~1,600,000 |
+| Olisipo | Lisbon | ~7,653 | ~1,600,000 |
+| Vindobona | Vienna | ~4,837 | ~1,600,000 |
+| Lopodunum | Mannheim | ~6,408 | ~1,280,000 |
+| Singidunum | Belgrade | ~3,737 | ~1,275,000 |
+| Apollonia (Syria Palestina) | Tel Aviv | ~706 | ~1,250,000 |
+
 ## Roman cities connected by the roads
 
 Of **1388** known Roman cities (Hanson 2016, 100 BC – AD 300), **1105 (80%)** lie within 5 km of a DARMC road.

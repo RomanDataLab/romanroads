@@ -46,6 +46,13 @@ WIKI_CACHE = ROOT / "data" / "city_wiki_links.csv"
 FOUNDERS_CACHE = ROOT / "data" / "city_founders.csv"
 CAPITALS_IMPERIAL = ROOT / "data" / "capitals_imperial.csv"
 CAPITALS_PROVINCIAL = ROOT / "data" / "capitals_provincial.csv"
+REBA_CHANDLER = ROOT / "data" / "chandler.csv"
+REBA_MODELSKI = ROOT / "data" / "modelski_ancient.csv"
+
+# "Alive today" layer: Roman sites whose modern successor city reached this
+# population by the last year of the Reba et al. 2016 datasets (AD 1975)
+MODERN_POP_MIN = 300_000
+MODERN_MATCH_KM = 15.0
 
 # Capital cities double their population weight in the UNA path computation.
 # Two variants are run: imperial capitals only, and imperial + provincial.
@@ -298,6 +305,54 @@ def annotate_capitals(cities: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     n_prov = int(cities["prov_label"].notna().sum())
     print(f"capital labels merged: {n_imp} imperial, {n_prov} provincial")
     return cities
+
+
+def add_modern_continuations(cities: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Mark Roman cities whose site carries a living modern city.
+
+    The Reba et al. 2016 datasets (Chandler + Modelski, city populations
+    BC 2250 - AD 1975) supply each modern city's latest population. Every
+    modern city of at least MODERN_POP_MIN is matched to its nearest Roman
+    city (<= MODERN_MATCH_KM), so each modern city pins exactly one Roman
+    site. Merges modern_city / modern_pop / modern_year onto `cities`."""
+    frames = []
+    for f in (REBA_CHANDLER, REBA_MODELSKI):
+        ch = pd.read_csv(f, encoding="latin-1", low_memory=False)
+        yrcols = [c for c in ch.columns if c.startswith(("BC_", "AD_"))]
+        raw = ch[yrcols].apply(pd.to_numeric, errors="coerce")
+        ch["modern_pop"] = raw.ffill(axis=1).iloc[:, -1]
+        has = raw.notna().to_numpy()
+        idx = has.shape[1] - 1 - has[:, ::-1].argmax(axis=1)  # last real estimate
+        ch["modern_year"] = [yrcols[i] for i in idx]
+        frames.append(ch[["City", "Latitude", "Longitude", "modern_pop", "modern_year"]])
+    mod = pd.concat(frames, ignore_index=True)
+    mod["Latitude"] = pd.to_numeric(mod["Latitude"], errors="coerce")
+    mod["Longitude"] = pd.to_numeric(mod["Longitude"], errors="coerce")
+    mod = mod.dropna(subset=["Latitude", "Longitude"])
+    mod = mod[mod["modern_pop"] >= MODERN_POP_MIN].reset_index(drop=True)
+
+    lat0 = np.radians(cities.geometry.y.to_numpy())
+    lon0 = np.radians(cities.geometry.x.to_numpy())
+    rows = []
+    for _, r in mod.iterrows():
+        la, lo = np.radians(r["Latitude"]), np.radians(r["Longitude"])
+        d = 2 * 6371.0 * np.arcsin(np.sqrt(
+            np.sin((la - lat0) / 2) ** 2
+            + np.cos(la) * np.cos(lat0) * np.sin((lo - lon0) / 2) ** 2))
+        j = int(d.argmin())
+        if d[j] <= MODERN_MATCH_KM:
+            rows.append((cities.iloc[j]["Primary Key"], r["City"],
+                         float(r["modern_pop"]), r["modern_year"], float(d[j])))
+    cont = pd.DataFrame(rows, columns=["Primary Key", "modern_city", "modern_pop",
+                                       "modern_year", "dist_km"])
+    cont = cont.sort_values(["modern_city", "dist_km"]).drop_duplicates("modern_city")
+    # same Roman site can catch two modern names (e.g. Istanbul/Instanbul in
+    # Chandler vs Modelski): keep the bigger modern city
+    cont = cont.sort_values("modern_pop", ascending=False).drop_duplicates("Primary Key")
+    cont.to_csv(OUT / "modern_continuations.csv", index=False)
+    print(f"modern continuations: {len(cont)} Roman sites under living "
+          f"{MODERN_POP_MIN:,}+ cities (match radius {MODERN_MATCH_KM} km)")
+    return cities.merge(cont, on="Primary Key", how="left")
 
 
 def connect_cities(cities: gpd.GeoDataFrame, roads_metric: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -1272,6 +1327,28 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                 _icon_marker(c, prov_uri, 44, anchor=(22, 22)).add_to(fg_pcap)
             fg_pcap.add_to(m)
 
+        # Roman sites under living modern cities: cyan ring sized by the
+        # modern city's population (Reba et al. 2016, latest = AD 1975)
+        if "modern_pop" in cities.columns:
+            fg_alive = folium.FeatureGroup(
+                name=f"Modern cities on Roman sites ({MODERN_POP_MIN // 1000}k+ today)",
+                show=False)
+            for _, c in cities[cities["modern_pop"].notna()].iterrows():
+                pop = c["modern_pop"]
+                radius = 5 + 9 * min(1.0, max(0.0, (math.log10(pop) - 5.4) / 1.9))
+                roman = (f"~{int(c['population'] / 1000):,}k (c. AD 165)"
+                         if c["population"] == c["population"] and c["population"] > 0
+                         else "no estimate")
+                folium.CircleMarker(
+                    [c.geometry.y, c.geometry.x],
+                    radius=radius, color="#22d3ee", weight=2.5, fill=True,
+                    fill_color="#22d3ee", fill_opacity=0.12,
+                    tooltip=(f"<b>{c['Ancient Toponym']} &#8594; {c['modern_city']}</b><br>"
+                             f"Roman: {roman}<br>"
+                             f"Today: ~{int(pop):,} ({c['modern_year']})"),
+                ).add_to(fg_alive)
+            fg_alive.add_to(m)
+
         # legend panel: rollable sections, aligned with the upper control
         def swatches(colors):
             return "".join(
@@ -1317,6 +1394,11 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                       ' provincial capital<br>'
                       '<span style="color:#8b949e">the UNA betweenness scheme uses the'
                       ' imperial+provincial variant</span>')
+            + section(f"7. Alive today ({MODERN_POP_MIN // 1000}k+ modern city on the site)",
+                      '<span style="display:inline-block;width:10px;height:10px;'
+                      'margin:0 4px 0 0;border:2px solid #22d3ee;border-radius:50%;'
+                      'vertical-align:middle"></span>Roman site under a living modern city'
+                      ' (Reba/Chandler, 1975)')
             + '</div></div></div>'
             '<script>window.addEventListener("load",function(){setTimeout(function(){'
             # one card, two tabs: the Leaflet layers control moves into the
@@ -1496,6 +1578,22 @@ def write_findings(hexes: pd.DataFrame, G: nx.Graph, cities: gpd.GeoDataFrame = 
                   "(curated lists: data/capitals_imperial.csv, data/capitals_provincial.csv).",
                   ""]
 
+    if cities is not None and "modern_pop" in cities.columns:
+        alive = cities[cities["modern_pop"].notna()]
+        lines += ["## Roman sites under living modern cities", "",
+                  f"{len(alive)} Roman cities carry a modern successor of at least "
+                  f"{MODERN_POP_MIN:,} inhabitants (nearest match within "
+                  f"{MODERN_MATCH_KM} km; modern population at the last year of the "
+                  "Reba et al. 2016 datasets, AD 1975). Top 20 by modern population:", "",
+                  "| Roman city | modern city | Roman pop (c. AD 165) | modern pop |",
+                  "|---|---|---|---|"]
+        for _, r in alive.nlargest(20, "modern_pop").iterrows():
+            rp = (f"~{int(r['population']):,}" if r["population"] == r["population"]
+                  and r["population"] > 0 else "-")
+            lines.append(f"| {r['Ancient Toponym']} | {r['modern_city']} | {rp} | "
+                         f"~{int(r['modern_pop']):,} |")
+        lines.append("")
+
     if cities is not None:
         n_total, n_conn = len(cities), int(cities["connected"].sum())
         lines += [f"## Roman cities connected by the roads", "",
@@ -1526,6 +1624,7 @@ def main() -> None:
     roads_raw = gpd.read_file(DATA)  # Lambert Conformal Conic, metres
     roads = load_roads()
     cities = connect_cities(annotate_capitals(load_cities()), roads_raw)
+    cities = add_modern_continuations(cities)
     plot_base_map(roads, cities)
     G = build_graph(roads, roads_raw.geometry.length / 1000)
     nodes = compute_centralities(G)

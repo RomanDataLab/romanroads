@@ -11,7 +11,8 @@ Milan Janosov's 2023 analysis ([Towards Data Science](https://towardsdatascience
 4. Aggregates node scores into **H3 hexagons (resolution 3)** covering the Empire's extent (20 km buffer).
 5. Loads **1,388 Roman cities** (Hanson 2016) and measures each city's distance to the nearest road.
 6. **UNA centrality with capitals ×2** — two variants (11 imperial capitals/residences; 47 imperial + provincial, curated in `data/capitals_*.csv`) where capital node weight = population × 2. Weighted betweenness uses exact Brandes accumulation (tied shortest paths split fractionally). Each variant gets its own roads/junctions map layer.
-7. Emits static maps (PNG), an interactive folium map (HTML), a GEXF graph for Gephi, CSVs, and findings.
+7. **Alive today** — Roman sites under living 300k+ modern cities, matched by coordinates against the Reba et al. 2016 datasets (Chandler/Modelski, latest = AD 1975); cyan ring layer sized by modern population.
+8. Emits static maps (PNG), an interactive folium map (HTML), a GEXF graph for Gephi, CSVs, and findings.
 
 ## Findings
 
@@ -34,6 +35,7 @@ Milan Janosov's 2023 analysis ([Towards Data Science](https://towardsdatascience
 | `nodes_centrality.csv` / `cities_road_access.csv` | Per-node and per-city data |
 | `cities_una.csv` | Per-city UNA betweenness for both capital variants + reach (100 km) |
 | `road_load_imp.csv` / `road_load_iprov.csv` | Per-road-chunk weighted path load per variant |
+| `modern_continuations.csv` | Roman sites under living 300k+ modern cities (Reba 1975 match) |
 | `findings.md` | Full results tables |
 
 ## Run
