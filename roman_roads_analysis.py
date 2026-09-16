@@ -51,7 +51,7 @@ REBA_MODELSKI = ROOT / "data" / "modelski_ancient.csv"
 
 # "Alive today" layer: Roman sites whose modern successor city reached this
 # population by the last year of the Reba et al. 2016 datasets (AD 1975)
-MODERN_POP_MIN = 300_000
+MODERN_POP_MIN = 100_000
 MODERN_MATCH_KM = 15.0
 
 # Capital cities double their population weight in the UNA path computation.
@@ -329,7 +329,12 @@ def add_modern_continuations(cities: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     mod["Latitude"] = pd.to_numeric(mod["Latitude"], errors="coerce")
     mod["Longitude"] = pd.to_numeric(mod["Longitude"], errors="coerce")
     mod = mod.dropna(subset=["Latitude", "Longitude"])
-    mod = mod[mod["modern_pop"] >= MODERN_POP_MIN].reset_index(drop=True)
+    # 'latest population' must be recent: a city whose last estimate is ancient
+    # (e.g. Ephesus AD 600, Thebes BC 700) is dead, not a living successor
+    yr = mod["modern_year"].map(
+        lambda s: -int(str(s).split("_")[1]) if str(s).startswith("BC_")
+        else int(str(s).split("_")[1]))
+    mod = mod[(mod["modern_pop"] >= MODERN_POP_MIN) & (yr >= 1800)].reset_index(drop=True)
 
     lat0 = np.radians(cities.geometry.y.to_numpy())
     lon0 = np.radians(cities.geometry.x.to_numpy())
