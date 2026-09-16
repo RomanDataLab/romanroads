@@ -1150,7 +1150,6 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
     folium.GeoJson(
         roads_json, name="Roman roads",
         style_function=lambda _: {"color": "#bbbbbb", "weight": 0.6, "opacity": 0.55},
-        tooltip=folium.GeoJsonTooltip(fields=["CERTAINTY"], aliases=["Certainty:"]) if "CERTAINTY" in roads.columns else None,
     ).add_to(m)
 
     cmap = plt.get_cmap("RdYlGn")
@@ -1276,7 +1275,6 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
                             [[lat, lng] for lng, lat in geom.coords],
                             color=_load_color(share), weight=1 + 2.5 * (share / peak),
                             opacity=0.85,
-                            tooltip=f"road: {share * 100:.1f}% of weighted paths ({label})",
                         ).add_to(fg_net)
                     else:
                         folium.PolyLine(
