@@ -1188,11 +1188,11 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             pop = c["population"]
             if pop == pop and pop > 0:
                 yr = c["estimate_year"] if c["estimate_year"] == c["estimate_year"] else ""
-                pop_line = f"<br>Population: ~{pop / 1000:,.0f}k inhabitants"
+                pop_line = f"<br>Population: ~{pop:,.0f} inhabitants"
                 if yr:
                     pop_line += f" ({yr})"
             else:
-                pop_line = "<br>Population: 0k (no estimate)"
+                pop_line = "<br>Population: no estimate"
             caps = ""
             for col, text in (("imp_label", c.get("imp_label")), ("prov_label", c.get("prov_label"))):
                 if text is not None and text == text:
@@ -1353,7 +1353,7 @@ def build_interactive(roads, hexes, rome, cities: gpd.GeoDataFrame = None,
             for _, c in cities[cities["modern_pop"].notna()].iterrows():
                 pop = c["modern_pop"]
                 radius = 5 + 9 * min(1.0, max(0.0, (math.log10(pop) - 5.4) / 1.9))
-                roman = (f"~{int(c['population'] / 1000):,}k (c. AD 165)"
+                roman = (f"~{int(c['population']):,} (c. AD 165)"
                          if c["population"] == c["population"] and c["population"] > 0
                          else "no estimate")
                 folium.CircleMarker(
