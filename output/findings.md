@@ -128,7 +128,7 @@ Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 20
 
 ## Roman sites under living modern cities
 
-64 Roman cities carry a modern successor of at least 100,000 inhabitants (nearest match within 15.0 km; modern population at the last year of the Reba et al. 2016 datasets, AD 1975). Top 20 by modern population:
+108 Roman cities carry a modern successor of at least 100,000 inhabitants (nearest match within 15.0 km; modern population at the last year of the Reba et al. 2016 datasets, AD 1975). Top 20 by modern population:
 
 | Roman city | modern city | Roman pop (c. AD 165) | modern pop |
 |---|---|---|---|
@@ -140,6 +140,7 @@ Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 20
 | Barcino | Barcelona | ~1,157 | ~3,500,000 |
 | Athenae | Athens | ~58,114 | ~3,300,000 |
 | Byzantium | Istanbul | ~35,321 | ~3,200,000 |
+| Smyrna | Izmir | ~47,672 | ~2,900,000 |
 | Alexandria (Aegyptus) | Alexandria | ~410,535 | ~2,800,000 |
 | Aquincum | Budapest | ~3,937 | ~2,000,000 |
 | Neapolis (Italia (I Latium and Campania)) | Naples | ~15,086 | ~1,900,000 |
@@ -149,9 +150,8 @@ Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 20
 | Ancyra | Ankara | ~24,456 | ~1,600,000 |
 | Olisipo | Lisbon | ~7,653 | ~1,600,000 |
 | Vindobona | Vienna | ~4,837 | ~1,600,000 |
+| Iconium | Konya | - | ~1,350,000 |
 | Lopodunum | Mannheim | ~6,408 | ~1,280,000 |
-| Singidunum | Belgrade | ~3,737 | ~1,275,000 |
-| Apollonia (Syria Palestina) | Tel Aviv | ~706 | ~1,250,000 |
 
 ## Roman cities connected by the roads
 

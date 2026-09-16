@@ -354,6 +354,20 @@ def add_modern_continuations(cities: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     # same Roman site can catch two modern names (e.g. Istanbul/Instanbul in
     # Chandler vs Modelski): keep the bigger modern city
     cont = cont.sort_values("modern_pop", ascending=False).drop_duplicates("Primary Key")
+    # curated supplement (data/modern_cities_extra.csv): living 100k+ successors
+    # whose Reba/Chandler/Modelski trail is stale (last estimate < 100k) or absent
+    # entirely (e.g. Tarragona). Extras win only where bigger or unmatched.
+    extra_path = ROOT / "data" / "modern_cities_extra.csv"
+    if extra_path.exists():
+        ex = pd.read_csv(extra_path).rename(columns={"primary_key": "Primary Key"})
+        ex["dist_km"] = float("nan")
+        cont = pd.concat([cont, ex], ignore_index=True)
+        cont = cont.sort_values("modern_pop", ascending=False).drop_duplicates("Primary Key")
+        # two Hanson entries can sit under one modern city (Valentia (1)/(2) both
+        # = Valencia): one ring per modern city, biggest population wins
+        cont = cont.drop_duplicates("modern_city")
+        print(f"modern continuations: +{len(ex)} curated extras "
+              f"({int(ex['modern_pop'].min()):,}..{int(ex['modern_pop'].max()):,})")
     cont.to_csv(OUT / "modern_continuations.csv", index=False)
     print(f"modern continuations: {len(cont)} Roman sites under living "
           f"{MODERN_POP_MIN:,}+ cities (match radius {MODERN_MATCH_KM} km)")
