@@ -128,7 +128,7 @@ Method: UNA toolbox concepts (Sevtsuk et al., City Form Lab); network = DARMC 20
 
 ## Roman sites under living modern cities
 
-108 Roman cities carry a modern successor of at least 100,000 inhabitants (nearest match within 15.0 km; modern population at the last year of the Reba et al. 2016 datasets, AD 1975). Top 20 by modern population:
+122 Roman cities carry a modern successor of at least 100,000 inhabitants (nearest match within 15.0 km; modern population at the last year of the Reba et al. 2016 datasets, AD 1975). Top 20 by modern population:
 
 | Roman city | modern city | Roman pop (c. AD 165) | modern pop |
 |---|---|---|---|
